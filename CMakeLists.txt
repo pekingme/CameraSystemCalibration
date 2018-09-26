@@ -16,12 +16,16 @@ ${PROJECT_SOURCE_DIR}
 set(CALIBRATION_HEADERS
 camera_system_calibration.h
 camera.h
+video_synchronizer.h
+video_clip.h
 utils.h
 )
 
 add_library(${PROJECT_NAME} ${CALIBRATION_LIB_TYPE}
 camera_system_calibration.cpp
 camera.cpp
+video_synchronizer.cpp
+video_clip.cpp
 utils.cpp
 ${CALIBRATION_HEADERS}
 )

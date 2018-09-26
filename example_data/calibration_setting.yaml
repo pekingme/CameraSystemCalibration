@@ -1,0 +1,29 @@
+%YAML:1.0
+
+NumCamera: 4
+
+# Videos should be taken to make the pattern looks as big as possible in the view.
+# Avoid continuous rotation; hold still for several seconds while single camera facing pattern,
+# and the angle between two camera facing pattern.
+Videos:
+
+  - "/media/haodong/TOSHIBA 1T/Data/set3/calibF.MP4"
+  - "/media/haodong/TOSHIBA 1T/Data/set3/calibR.MP4"
+  - "/media/haodong/TOSHIBA 1T/Data/set3/calibB.MP4"
+  - "/media/haodong/TOSHIBA 1T/Data/set3/calibL.MP4"
+# Time gap between frame sample in seconds
+FrameGap: 0.2
+# Charuco board parameters
+BoardSize.x: 9
+BoardSize.y: 6
+# SquareSize and MarkerSize in meters
+SquareSize: 0.0438546
+MarkerSize: 0.0263128
+# DICT_4X4_50=0,  DICT_4X4_100=1,   DICT_4X4_250=2,   DICT_4X4_1000=3,
+# DICT_5X5_50=4,  DICT_5X5_100=5,   DICT_5X5_250=6,   DICT_5X5_1000=7,
+# DICT_6X6_50=8,  DICT_6X6_100=9,   DICT_6X6_250=10,  DICT_6X6_1000=11, 
+# DICT_7X7_50=12, DICT_7X7_100=13,  DICT_7X7_250=14,  DICT_7X7_1000=15, 
+# DICT_ARUCO_ORIGINAL = 16
+ArucoDictionary: 0
+# Max time shift in synchronization (seconds)
+MaxShift: 5
