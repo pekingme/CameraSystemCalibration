@@ -7,6 +7,7 @@
 #define CAMERA_H
 
 #include <string>
+#include "opencv2/opencv.hpp"
 
 #define AFFINE_SIZE 5
 #define POLY_SIZE 5
@@ -14,12 +15,22 @@
 #define TOTAL_SIZE (AFFINE_SIZE+POLY_SIZE+INV_POLY_SIZE)
 
 using namespace std;
+using namespace cv;
 
-class camera
+class Camera
 {
 public:
-    camera ( string name ) : _name ( name ) {};
-    ~camera() {};
+    Camera ( string name ) : _name ( name ) {};
+    ~Camera() {};
+
+    void SetFrameSize ( const Size& frame_size ) {
+        _width = frame_size.width;
+        _height = frame_size.height;
+    }
+
+    string GetName() {
+        return _name;
+    }
 private:
     // Camera's name
     string _name;

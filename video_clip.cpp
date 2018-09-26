@@ -82,7 +82,7 @@ bool VideoClip::ExtractAudioSamples ( Mat* mat, const int duration )
                     decoding_packet.data = NULL;
                 }
 
-                if ( samples.size() >= (unsigned) duration_in_sample )
+                if ( samples.size() >= ( unsigned ) duration_in_sample )
                 {
                     enough_samples = true;
                     break;
@@ -124,6 +124,23 @@ bool VideoClip::ExtractAudioSamples ( Mat* mat, const int duration )
     memcpy ( mat->data, samples.data(), samples.size() * sample_size );
 
     return samples.size() != 0;
+}
+
+void VideoClip::LoadVideoCapture()
+{
+    if ( &_video_capture != NULL && _video_capture.isOpened() )
+    {
+        _video_capture.set ( CV_CAP_PROP_POS_FRAMES, 0 );
+        return;
+    }
+    _video_capture = VideoCapture ( _file_name );
+    if ( !_video_capture.isOpened() )
+    {
+        cerr << "Cannot open video file: " << _file_name << endl;
+        _loaded = false;
+    }
+    _frame_size = Size ( _video_capture.get ( CV_CAP_PROP_FRAME_WIDTH ), _video_capture.get ( CV_CAP_PROP_FRAME_HEIGHT ) );
+    _loaded = true;
 }
 
 void VideoClip::CopySamplesToVector ( const AVCodecContext* codec_context, const AVFrame* frame, vector< float >& samples )
