@@ -133,7 +133,19 @@ void CameraSystemCalibration::Calibrate()
 
 void CameraSystemCalibration::CalibrateMonoCameras()
 {
-
+  cout << endl << "\tPerforming mono camera calibration ..." << endl;
+  
+  for(unsigned c=0;c<_camera_calibrations.size();c++){
+    CameraCalibration* camera_calibration = _camera_calibrations[c];
+    camera_calibration->Calibrate();
+    camera_calibration->Reproject();
+    camera_calibration->RejectFrames(1000, 1000);
+    camera_calibration->Reproject();
+    camera_calibration->OptimizeFully();
+    camera_calibration->Reproject();
+  }
+  
+  cout << "... Done." << endl;
 }
 
 void CameraSystemCalibration::AlignCamerasAndBoards()

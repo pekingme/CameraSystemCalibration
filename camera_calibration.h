@@ -21,6 +21,18 @@ public:
 
     // Extracts corners from frame and save if it's valid.
     bool ExtractCornersAndSave(Frame* frame);
+    
+    // Performs initial calibration.
+    void Calibrate();
+    
+    // Rejects frames with very big error.
+    void RejectFrames(const double average_bound, const double deviation_bound);
+    
+    // Optimizes intrinsic and extrinsic parameters.
+    void OptimizeFully();
+    
+    // Calculates reprojection error of current calibration result.
+    void Reproject();
 	
     Camera* GetCameraPtr() {
         return &_camera;

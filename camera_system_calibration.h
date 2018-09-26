@@ -39,7 +39,7 @@ private:
     // Optimizes poses of all cameras and boards to minimize reprojection error.
     void OptimizeExtrinsics();
     
-    // Calculates reprojection error of current result.
+    // Calculates reprojection error of current calibration result.
     void Reproject();
     
     const string _output_file_name;

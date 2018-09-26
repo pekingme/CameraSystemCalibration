@@ -37,3 +37,23 @@ bool CameraCalibration::ExtractCornersAndSave ( Frame* frame )
     
     return true;
 }
+
+void CameraCalibration::Calibrate()
+{
+
+}
+
+void CameraCalibration::RejectFrames ( const double average_bound, const double deviation_bound )
+{
+
+}
+
+void CameraCalibration::OptimizeFully()
+{
+
+}
+
+void CameraCalibration::Reproject()
+{
+
+}
