@@ -28,8 +28,26 @@ public:
         _height = frame_size.height;
     }
 
+    // Getters
     string GetName() {
         return _name;
+    }
+    int GetWidth() {
+        return _width;
+    }
+    int GetHeight() {
+        return _height;
+    }
+    double GetU0() {
+        return _intrinsics[3];
+    }
+    double GetV0() {
+        return _intrinsics[4];
+    }
+
+    // Setters
+    void SetIntrinsics ( const double intrinsics[] ) {
+        copy ( intrinsics, intrinsics+TOTAL_SIZE, _intrinsics );
     }
 private:
     // Camera's name

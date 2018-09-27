@@ -20,6 +20,9 @@ public:
     
     // Collects points from vector based on ids to a N x 1 x c(3) Mat.
     static Mat GetCharucoBoardCornersMatFromVector(const Mat& corner_ids, const vector<Point3f>& point_vector);
+    
+    // Return +1 if positive, -1 if negative, 0 otherwise.
+    static int Sign(const double value);
 };
 
 #endif // UTILS_H

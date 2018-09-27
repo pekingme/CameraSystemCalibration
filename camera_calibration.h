@@ -38,6 +38,17 @@ public:
         return &_camera;
     }
 private:
+    // Calculates simplified transform matrix [r11, r12, t1; r21, r22, t2; r31, r32, 0].
+    // Since z of board corners is all 0, vector r3 can be ignored for now.
+    // t3 is set to 0 and will be determined later.
+    void CalculateInitialTransforms(const Frame& frame, Mat* u, Mat* v, Mat* x, Mat* y, vector<Mat>* transforms);
+    
+    // Filters out invalid transforms based on translation.
+    bool RefineTransforms(const Mat& u, const Mat& v, const Mat& x, const Mat& y, vector<Mat>* transforms);
+    
+    // Finalizes the transform based on the fact that the center must be minima.
+    bool FinalizeTransform(const Mat& u, const Mat& v, const Mat& x, const Mat& y, const vector<Mat>& transforms, Mat* final_transform);
+  
     const CameraSystemCalibrationOptions _options;
     Camera _camera;
     unordered_set<unsigned> _valid_frame_set;
