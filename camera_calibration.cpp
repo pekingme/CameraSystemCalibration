@@ -35,6 +35,9 @@ bool CameraCalibration::ExtractCornersAndSave ( Frame* frame )
     frame->transform = Mat::zeros ( 3, 4, CV_64FC1 );
     frame->valid = true;
 
+    _valid_frame_set.insert ( frame->global_index );
+    _valid_frames.push_back ( *frame );
+
     return true;
 }
 
@@ -46,7 +49,8 @@ void CameraCalibration::Calibrate()
         exit ( -1 );
     }
     // Initializes intrinsic parameters.
-    double initial_intrinsics[TOTAL_SIZE] = {1, 0, 0, _camera.GetWidth() /2.0, _camera.GetHeight() /2.0};
+    Vec2i frame_size = _camera.GetFrameSize();
+    double initial_intrinsics[TOTAL_SIZE] = {1, 0, 0, frame_size[0]/2.0, frame_size[1]/2.0};
     _camera.SetIntrinsics ( initial_intrinsics );
     // Initializes extrinsic parameters based on observed corners.
     for ( unsigned i=0; i<_valid_frames.size(); i++ )
@@ -54,20 +58,27 @@ void CameraCalibration::Calibrate()
         vector<Mat> transforms;
         Mat u, v, x, y;
         CalculateInitialTransforms ( _valid_frames[i], &u, &v, &x, &y, &transforms );
-        if ( RefineTransforms ( u, v, x, y, &transforms )
-                || FinalizeTransform ( u, v, x, y, transforms, &_valid_frames[i].transform ) )
+        if ( !RefineTransforms ( u, v, x, y, &transforms )
+                || !FinalizeTransform ( u, v, x, y, transforms, &_valid_frames[i].transform ) )
         {
             _valid_frames[i].valid = false;
             continue;
         }
     }
+    // Calculates poly parameters and t3 together.
+    CalculatePolyAndT3();
+    // Calculates inverse poly parameters.
+    CalculateInversePoly();
+    // Prints current calibration parameters
+    _camera.PrintCameraParameters ( "\t" );
 }
 
 void CameraCalibration::CalculateInitialTransforms ( const Frame& frame, Mat* u, Mat* v, Mat* x, Mat* y, vector< Mat >* transforms )
 {
     // Splits corners coordinates into u, v, x, y.
-    Mat ( frame.flatten_detected_corners_64.col ( 0 ) - _camera.GetU0() ).copyTo ( *u );
-    Mat ( frame.flatten_detected_corners_64.col ( 1 ) - _camera.GetV0() ).copyTo ( *v );
+    Vec2d camera_center = _camera.GetCenter();
+    Mat ( frame.flatten_detected_corners_64.col ( 0 ) - camera_center[0] ).copyTo ( *u );
+    Mat ( frame.flatten_detected_corners_64.col ( 1 ) - camera_center[1] ).copyTo ( *v );
     Mat ( frame.flatten_board_corners_64.col ( 0 ) ).copyTo ( *x );
     Mat ( frame.flatten_board_corners_64.col ( 1 ) ).copyTo ( *y );
 
@@ -151,7 +162,7 @@ bool CameraCalibration::RefineTransforms ( const Mat& u, const Mat& v, const Mat
     int min_translation_index = -1;
     for ( unsigned i=0; i<transforms->size(); i++ )
     {
-        Vec2d t ( (*transforms)[i].at<double> ( 0,2 ), (*transforms)[i].at<double> ( 1,2 ) );
+        Vec2d t ( ( *transforms ) [i].at<double> ( 0,2 ), ( *transforms ) [i].at<double> ( 1,2 ) );
         Vec2d p ( u.at<double> ( 0,0 ), v.at<double> ( 0,0 ) );
         double translation = norm ( t - p );
         if ( translation < min_translation )
@@ -166,13 +177,13 @@ bool CameraCalibration::RefineTransforms ( const Mat& u, const Mat& v, const Mat
     {
         for ( unsigned i=0; i<transforms->size(); i++ )
         {
-            double t1 = (*transforms)[i].at<double> ( 0,2 );
-            double t2 = (*transforms)[i].at<double> ( 1,2 );
-            double min_t1 = (*transforms)[min_translation_index].at<double> ( 0,2 );
-            double min_t2 = (*transforms)[min_translation_index].at<double> ( 1,2 );
+            double t1 = ( *transforms ) [i].at<double> ( 0,2 );
+            double t2 = ( *transforms ) [i].at<double> ( 1,2 );
+            double min_t1 = ( *transforms ) [min_translation_index].at<double> ( 0,2 );
+            double min_t2 = ( *transforms ) [min_translation_index].at<double> ( 1,2 );
             if ( Utils::Sign ( t1 ) == Utils::Sign ( min_t1 ) && Utils::Sign ( t2 ) == Utils::Sign ( min_t2 ) )
             {
-                refined_transforms.push_back ( (*transforms)[i] );
+                refined_transforms.push_back ( ( *transforms ) [i] );
             }
         }
         transforms->swap ( refined_transforms );
@@ -246,6 +257,83 @@ bool CameraCalibration::FinalizeTransform ( const Mat& u, const Mat& v, const Ma
     return true;
 }
 
+void CameraCalibration::CalculatePolyAndT3()
+{
+    double poly_parameters[POLY_SIZE];
+    _camera.GetPolyParameters ( poly_parameters );
+    double t3s[_valid_frames.size()];
+    // Forms up the ceres problem.
+    ceres::Problem problem;
+    for ( unsigned frame_index=0; frame_index<_valid_frames.size(); frame_index++ )
+    {
+        Frame frame = _valid_frames[frame_index];
+        if ( !frame.valid )
+        {
+            continue;
+        }
+        t3s[frame_index] = frame.transform.at<double> ( 2, 3 );
+        for ( unsigned corner_index=0; corner_index<frame.corner_count; corner_index++ )
+        {
+            Vec2d detected_corner ( ( double* ) frame.flatten_detected_corners_64.row ( corner_index ).data );
+            Vec3d board_corner ( ( double* ) frame.flatten_board_corners_64.row ( corner_index ).data );
+            detected_corner -= _camera.GetCenter();
+
+            ceres::CostFunction* costFunction = ErrorToSolvePolyAndT3::Create ( detected_corner, board_corner, frame.transform );
+            problem.AddResidualBlock ( costFunction, NULL, poly_parameters, &t3s[frame_index] );
+        }
+    }
+    // Solves ceres problem.
+    ceres::Solver::Options options;
+    options.num_threads = 4;
+    options.max_num_iterations = 100;
+    if ( _ceres_details_enabled )
+    {
+        options.minimizer_progress_to_stdout = true;
+    }
+    ceres::Solver::Summary summary;
+    Solve ( options, &problem, &summary );
+    if ( _ceres_details_enabled )
+    {
+        cout << summary.FullReport() << endl;
+    }
+    // Updates poly parameters and t3s.
+    poly_parameters[1] = 0.0;
+    _camera.SetPolyParameters(poly_parameters);
+    for(unsigned frame_index=0; frame_index<_valid_frames.size(); frame_index++){
+      _valid_frames[frame_index].transform.at<double>(2, 3) = t3s[frame_index];
+    }
+}
+
+void CameraCalibration::CalculateInversePoly()
+{
+    double poly_parameters[POLY_SIZE];
+    _camera.GetPolyParameters(poly_parameters);
+    double inverse_poly_parameters[INV_POLY_SIZE];
+    _camera.GetInversePolyParameters(inverse_poly_parameters);
+    int max_rho = static_cast<int>(norm(_camera.GetFrameSize())/2*1.2);
+    // Forms up the ceres problem.
+    ceres::Problem problem;
+    for(int rho=0; rho<max_rho; rho++){
+      ceres::CostFunction* costFunction = ErrorToSolveInversePoly::Create(poly_parameters, static_cast<double>(rho));
+      problem.AddResidualBlock(costFunction, NULL, inverse_poly_parameters);
+    }
+    // Solves ceres problem.
+    ceres::Solver::Options options;
+    options.num_threads = 4;
+    options.max_num_iterations = 100;
+    if ( _ceres_details_enabled )
+    {
+        options.minimizer_progress_to_stdout = true;
+    }
+    ceres::Solver::Summary summary;
+    Solve ( options, &problem, &summary );
+    if ( _ceres_details_enabled )
+    {
+        cout << summary.FullReport() << endl;
+    }
+    // Update inverse poly parameters.
+    _camera.SetInversePolyParameters(inverse_poly_parameters);
+}
 
 void CameraCalibration::RejectFrames ( const double average_bound, const double deviation_bound )
 {

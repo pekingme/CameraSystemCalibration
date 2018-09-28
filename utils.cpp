@@ -18,7 +18,14 @@ void Utils::ShowFrameInWindow ( const string& window_name, const Frame& frame, c
 {
     Mat canvas_mat;
     frame.original_frame.copyTo ( canvas_mat );
-    // TODO draw corners
+    if ( draw_corners )
+    {
+        aruco::drawDetectedCornersCharuco ( canvas_mat, frame.detected_corners_32, frame.corner_ids, Scalar ( 0, 0, 255 ) );
+    }
+    if ( draw_reprojections )
+    {
+        //TODO draw reprojections
+    }
     imshow ( window_name, canvas_mat );
 }
 
@@ -48,4 +55,16 @@ int Utils::Sign ( const double value )
     {
         return 0;
     }
+}
+
+double Utils::EvaluatePolyEquation ( const double* coefficients, const int n, const double x )
+{
+    double y = 0.0;
+    double x_i = 1.0;
+    for ( int power=0; power<n; power++ )
+    {
+        y += coefficients[power] * x_i;
+        x_i *= x;
+    }
+    return y;
 }

@@ -5,6 +5,7 @@
 #include <iostream>
 #include "structs.h"
 #include "opencv2/opencv.hpp"
+#include "opencv2/aruco/charuco.hpp"
 
 using namespace std;
 using namespace cv;
@@ -23,6 +24,9 @@ public:
     
     // Return +1 if positive, -1 if negative, 0 otherwise.
     static int Sign(const double value);
+    
+    // Evaluates polynomial equations.
+    static double EvaluatePolyEquation(const double* coefficients, const int n, const double x);
 };
 
 #endif // UTILS_H

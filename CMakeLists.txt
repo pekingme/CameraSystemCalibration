@@ -11,6 +11,7 @@ find_package(Ceres REQUIRED)
 
 include_directories(
 ${PROJECT_SOURCE_DIR}
+${CERES_INCLUDE_DIRS}
 )
 
 set(CALIBRATION_HEADERS

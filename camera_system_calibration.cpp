@@ -44,7 +44,7 @@ CameraSystemCalibration::CameraSystemCalibration ( const string& output_file_nam
     // Creates single camera calibration.
     for ( unsigned i=0; i<_synchronized_video_clips.size(); i++ )
     {
-        _camera_calibrations.push_back ( CameraCalibration ( _synchronized_video_clips[i].GetCameraName(), _options ) );
+        _camera_calibrations.push_back ( CameraCalibration ( _synchronized_video_clips[i].GetCameraName(), _options, true ) );
     }
     cout << "... Done." << endl;
 }
