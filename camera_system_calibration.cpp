@@ -70,7 +70,7 @@ void CameraSystemCalibration::FetchCornersInFrames()
     // Fetches frames and corners.
     unsigned valid_frame_count = 0;
     unsigned frame_index = 0;
-    double current_time = 0.0;
+    double current_time = 9.0;
     while ( true )
     {
         bool no_more_frame = true;
@@ -138,11 +138,9 @@ void CameraSystemCalibration::CalibrateMonoCameras()
   for(unsigned c=0;c<_camera_calibrations.size();c++){
     CameraCalibration* camera_calibration = &_camera_calibrations[c];
     camera_calibration->Calibrate();
-    camera_calibration->Reproject();
-    camera_calibration->RejectFrames(1000, 1000);
-    camera_calibration->Reproject();
+    cout << "\t\tAverage reprojection error per corner is " << camera_calibration->Reproject() << endl;
     camera_calibration->OptimizeFully();
-    camera_calibration->Reproject();
+    cout << "\t\tAverage reprojection error per corner is " << camera_calibration->Reproject() << endl;
   }
   
   cout << "... Done." << endl;

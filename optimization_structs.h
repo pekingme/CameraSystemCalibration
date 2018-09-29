@@ -44,9 +44,9 @@ private:
     double a, b, c, d;
 };
 
-struct ErrorToSolveInversePoly {
+struct ErrorToUpdateInversePoly {
 public:
-    ErrorToSolveInversePoly ( const double* poly, const double rho )
+    ErrorToUpdateInversePoly ( const double* poly, const double rho )
         : poly ( poly ), rho ( rho ) {
         double f = Utils::EvaluatePolyEquation ( poly, POLY_SIZE, rho );
         theta = atan2 ( f, rho );
@@ -59,13 +59,66 @@ public:
     }
 
     static ceres::CostFunction* Create ( const double* poly, const double rho ) {
-        return ( new ceres::NumericDiffCostFunction<ErrorToSolveInversePoly, ceres::CENTRAL, 1, INV_POLY_SIZE> (
-                     new ErrorToSolveInversePoly ( poly, rho )
+        return ( new ceres::NumericDiffCostFunction<ErrorToUpdateInversePoly, ceres::CENTRAL, 1, INV_POLY_SIZE> (
+                     new ErrorToUpdateInversePoly ( poly, rho )
                  ) );
     }
 private:
     const double* poly;
     double rho, theta;
+};
+
+struct ErrorToUpdatePoly {
+public:
+    ErrorToUpdatePoly ( const double* inverse_poly_parameters, const double* poly_parameters, const double theta )
+        : inverse_poly_parameters ( inverse_poly_parameters ), poly_parameters ( poly_parameters ), theta ( theta ) {
+        rho = Utils::EvaluatePolyEquation ( inverse_poly_parameters, INV_POLY_SIZE, theta );
+    }
+
+    bool operator() ( const double* poly_factors, double* residuals ) const {
+        double new_poly_parameters[POLY_SIZE];
+        copy ( poly_parameters, poly_parameters+POLY_SIZE, new_poly_parameters );
+        for ( int i=0; i<POLY_SIZE; i++ ) {
+            new_poly_parameters[i] *= poly_factors[i];
+        }
+        double f = Utils::EvaluatePolyEquation ( new_poly_parameters, POLY_SIZE, rho );
+        residuals[0] = theta - atan2 ( f, rho );
+        return true;
+    }
+
+    static ceres::CostFunction* Create ( const double* inverse_poly_parameters, const double* poly_parameters, const double theta ) {
+        return ( new ceres::NumericDiffCostFunction<ErrorToUpdatePoly, ceres::CENTRAL, 1, POLY_SIZE> (
+                     new ErrorToUpdatePoly ( inverse_poly_parameters, poly_parameters, theta )
+                 ) );
+    }
+private:
+    const double* inverse_poly_parameters;
+    const double* poly_parameters;
+    const double theta;
+    double rho;
+};
+
+struct ErrorToOptimizeFully {
+public:
+    ErrorToOptimizeFully ( const Mat& detected_corners, const Mat& board_corners )
+        : detected_corners ( detected_corners ), board_corners ( board_corners ) {}
+
+    bool operator() ( const double* intrinsics, const double* rotation_vector, const double* translation_vector, double* residuals ) const {
+        Mat reprojected_corners;
+        Utils::ReprojectCornersInFrame ( intrinsics, rotation_vector, translation_vector, board_corners, &reprojected_corners );
+        Mat reprojection_error = reprojected_corners - detected_corners;
+        copy ( ( double* ) reprojection_error.data, ( double* ) reprojection_error.data + reprojected_corners.total(), residuals );
+        return true;
+    }
+
+    static ceres::CostFunction* Create ( const Mat& detected_corners, const Mat& board_corners ) {
+        return ( new ceres::NumericDiffCostFunction<ErrorToOptimizeFully, ceres::CENTRAL, ceres::DYNAMIC, TOTAL_SIZE, 3, 3> (
+                     new ErrorToOptimizeFully ( detected_corners, board_corners ), ceres::TAKE_OWNERSHIP, detected_corners.total()
+                 ) );
+    }
+
+private:
+    const Mat detected_corners, board_corners;
 };
 
 #endif // OPTIMIZATIONSTRUCTS_H

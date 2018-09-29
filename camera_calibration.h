@@ -33,8 +33,8 @@ public:
     // Optimizes intrinsic and extrinsic parameters.
     void OptimizeFully();
     
-    // Calculates reprojection error of current calibration result.
-    void Reproject();
+    // Calculates and return reprojection error per corner of current calibration result.
+    double Reproject();
 	
     Camera* GetCameraPtr() {
         return &_camera;
@@ -55,7 +55,10 @@ private:
     void CalculatePolyAndT3();
     
     // Calculates inverse poly parameters from poly parameters.
-    void CalculateInversePoly();
+    void CalculateInversePolyFromPoly();
+    
+    // Calculates poly parameters from inverse poly parameters.
+    void CalculatePolyFromInversePoly();
     
     const CameraSystemCalibrationOptions _options;
     Camera _camera;

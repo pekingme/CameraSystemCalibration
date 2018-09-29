@@ -4,6 +4,7 @@
 #include <string>
 #include <iostream>
 #include "structs.h"
+#include "camera.h"
 #include "opencv2/opencv.hpp"
 #include "opencv2/aruco/charuco.hpp"
 
@@ -27,6 +28,16 @@ public:
     
     // Evaluates polynomial equations.
     static double EvaluatePolyEquation(const double* coefficients, const int n, const double x);
+    
+    // Fetches rodrigues rotation vector and translation vector from 3 x 4 transform matrix.
+    static void GetRAndTVectorsFromTransform(const Mat& transform, Mat* r_mat, Mat* t_mat);
+    
+    // Forms up 3 x 4 transform matrix from rotation vector and translation vector.
+    static void GetTransformFromRAndTVectors(const Mat& r_mat, const Mat& t_mat, Mat* transform);
+    
+    // Reprojects the board corners in the frame based on input intrinsic and extrinsic parameters.
+    static void ReprojectCornersInFrame(const double* intrinsics, const double* rotation_vector, const double* translation_vector, 
+					const Mat& flatten_board_corners, Mat* reprojected_corners);
 };
 
 #endif // UTILS_H

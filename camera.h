@@ -32,17 +32,20 @@ public:
     string GetName() {
         return _name;
     }
-    Vec2i GetFrameSize(){
-      return Vec2i(_width, _height);
+    Vec2i GetFrameSize() {
+        return Vec2i ( _width, _height );
     }
     Vec2d GetCenter() {
         return Vec2d ( _intrinsics[3], _intrinsics[4] );
     }
-    void GetPolyParameters(double* poly_parameters) {
+    void GetPolyParameters ( double* poly_parameters ) {
         copy ( _intrinsics+POLY_START, _intrinsics+POLY_START+POLY_SIZE, poly_parameters );
     }
-    void GetInversePolyParameters(double* inverse_poly_parameters) {
+    void GetInversePolyParameters ( double* inverse_poly_parameters ) {
         copy ( _intrinsics+INV_POLY_START, _intrinsics+INV_POLY_START+INV_POLY_SIZE, inverse_poly_parameters );
+    }
+    void GetIntrinsicParameters ( double* intrinsic_parameters ) {
+        copy ( _intrinsics, _intrinsics+TOTAL_SIZE, intrinsic_parameters );
     }
 
     // Setters
@@ -52,7 +55,7 @@ public:
     void SetInversePolyParameters ( double* values ) {
         copy ( values, values+INV_POLY_SIZE, _intrinsics+INV_POLY_START );
     }
-    void SetIntrinsics ( const double intrinsics[] ) {
+    void SetIntrinsics ( double* intrinsics ) {
         copy ( intrinsics, intrinsics+TOTAL_SIZE, _intrinsics );
     }
 

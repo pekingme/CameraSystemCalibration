@@ -24,8 +24,10 @@ struct Frame {
     Mat corner_ids;
     Mat detected_corners_32; // N x 1 x 32FC2
     Mat board_corners_32; // N x 1 x 32FC3
+    Mat reprojected_corners_32; // N x 1 x 32FC2
     Mat flatten_detected_corners_64; // N x 2 x 64FC1
     Mat flatten_board_corners_64; // N x 3 x 64FC1
+    Mat flatten_reprojected_corners_64; // N x 3 x 64FC1
     Mat transform; // 3 x 4 x 64FC1
 };
 
