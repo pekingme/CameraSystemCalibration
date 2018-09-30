@@ -6,10 +6,12 @@ NumCamera: 4
 # Avoid continuous rotation; hold still for several seconds while single camera facing pattern,
 # and the angle between two camera facing pattern.
 Videos:
-  - { CameraName: "CameraF", File: "/media/haodong/TOSHIBA 1T/Data/set3/calibF.MP4" }
-  - { CameraName: "CameraR", File: "/media/haodong/TOSHIBA 1T/Data/set3/calibR.MP4" }
-  - { CameraName: "CameraB", File: "/media/haodong/TOSHIBA 1T/Data/set3/calibB.MP4" }
-  - { CameraName: "CameraL", File: "/media/haodong/TOSHIBA 1T/Data/set3/calibL.MP4" }
+  - { CameraName: "CameraF", File: "/media/haodong/TOSHIBA 1T/Data/set2/calibF.MP4" }
+  - { CameraName: "CameraR", File: "/media/haodong/TOSHIBA 1T/Data/set2/calibR.MP4" }
+  - { CameraName: "CameraB", File: "/media/haodong/TOSHIBA 1T/Data/set2/calibB.MP4" }
+  - { CameraName: "CameraL", File: "/media/haodong/TOSHIBA 1T/Data/set2/calibL.MP4" }
+# Absolute path to save valid frames used in calibration.
+FrameFolder: "/home/haodong/kdevelop_projects/CameraSystemCalibration/example_data/Frames/"
 # Time gap between frame sample in seconds
 FrameGap: 0.2
 # Charuco board parameters

@@ -121,4 +121,55 @@ private:
     const Mat detected_corners, board_corners;
 };
 
+struct ErrorToOptimizeFully2 {
+public:
+    ErrorToOptimizeFully2 ( const Mat& detected_corners, const Mat& board_corners )
+        : detected_corners ( detected_corners ), board_corners ( board_corners ) {}
+
+    bool operator() ( const double* affine, const double* inverse_poly, const double* rotation_vector, const double* translation_vector, double* residuals ) const {
+        double reconstructed_intrinsics[TOTAL_SIZE];
+        copy ( affine, affine+AFFINE_SIZE, reconstructed_intrinsics );
+        copy ( inverse_poly, inverse_poly+INV_POLY_SIZE, reconstructed_intrinsics+INV_POLY_START );
+        Mat reprojected_corners;
+        Utils::ReprojectCornersInFrame ( reconstructed_intrinsics, rotation_vector, translation_vector, board_corners, &reprojected_corners );
+        Mat reprojection_error = reprojected_corners - detected_corners;
+        copy ( ( double* ) reprojection_error.data, ( double* ) reprojection_error.data + reprojected_corners.total(), residuals );
+        return true;
+    }
+
+    static ceres::CostFunction* Create ( const Mat& detected_corners, const Mat& board_corners ) {
+        return ( new ceres::NumericDiffCostFunction<ErrorToOptimizeFully2, ceres::CENTRAL, ceres::DYNAMIC, AFFINE_SIZE, INV_POLY_SIZE, 3, 3> (
+                     new ErrorToOptimizeFully2 ( detected_corners, board_corners ), ceres::TAKE_OWNERSHIP, detected_corners.total()
+                 ) );
+    }
+
+private:
+    const Mat detected_corners, board_corners;
+};
+
+struct ErrorToOptimizeFully3 {
+public:
+    ErrorToOptimizeFully3 ( const Vec2d& detected_corner, const Vec3d& board_corner )
+        : detected_corner ( detected_corner ), board_corner ( board_corner ) {}
+
+    bool operator() ( const double* intrinsics, const double* rotation_vector, const double* translation_vector, double* residuals ) const {
+        Vec2d reprojected_corner;
+        Utils::ReprojectSingleCorner ( intrinsics, rotation_vector, translation_vector, board_corner, &reprojected_corner );
+        Vec2d reprojection_error = reprojected_corner - detected_corner;
+        residuals[0] = reprojection_error[0];
+        residuals[1] = reprojection_error[1];
+        return true;
+    }
+
+    static ceres::CostFunction* Create ( const Vec2d& detected_corner, const Vec3d& board_corner ) {
+        return ( new ceres::NumericDiffCostFunction<ErrorToOptimizeFully3, ceres::CENTRAL, 2, TOTAL_SIZE, 3, 3> (
+                     new ErrorToOptimizeFully3 ( detected_corner, board_corner )
+                 ) );
+    }
+
+private:
+    const Vec2d detected_corner;
+    const Vec3d board_corner;
+};
+
 #endif // OPTIMIZATIONSTRUCTS_H

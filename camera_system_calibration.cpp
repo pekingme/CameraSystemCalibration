@@ -133,17 +133,29 @@ void CameraSystemCalibration::Calibrate()
 
 void CameraSystemCalibration::CalibrateMonoCameras()
 {
-  cout << endl << "\tPerforming mono camera calibration ..." << endl;
-  
-  for(unsigned c=0;c<_camera_calibrations.size();c++){
-    CameraCalibration* camera_calibration = &_camera_calibrations[c];
-    camera_calibration->Calibrate();
-    cout << "\t\tAverage reprojection error per corner is " << camera_calibration->Reproject() << endl;
-    camera_calibration->OptimizeFully();
-    cout << "\t\tAverage reprojection error per corner is " << camera_calibration->Reproject() << endl;
-  }
-  
-  cout << "... Done." << endl;
+    cout << endl << "\tPerforming mono camera calibration ..." << endl;
+
+    for ( unsigned c=0; c<_camera_calibrations.size(); c++ )
+    {
+	CameraCalibration* camera_calibration = &_camera_calibrations[c];
+        cout << endl << "\t\tCalibrating camera [" << camera_calibration->GetCameraPtr()->GetName() << "] ..." << endl;
+	
+        camera_calibration->Calibrate();
+        cout << "\t\tAverage reprojection error after initial calibration is " << camera_calibration->Reproject() << endl;
+        do
+        {
+            camera_calibration->OptimizeFully();
+            cout << "\t\tAverage reprojection error after non-linear optimization is " << camera_calibration->Reproject() << endl;
+        }
+        while ( camera_calibration->RejectFrames ( 10, 1000 ) > 0 );
+
+        if ( _options.save_valid_frames )
+        {
+            camera_calibration->SaveAllValidFrames ( _options.save_frames_folder, true, true );
+        }
+    }
+
+    cout << "... Done." << endl;
 }
 
 void CameraSystemCalibration::AlignCamerasAndBoards()
@@ -184,6 +196,15 @@ void CameraSystemCalibration::ReadVideoFileAndCameraNames ( const string& config
 void CameraSystemCalibration::ReadCalibrationParameters ( const string& config_file_name, CameraSystemCalibrationOptions* options )
 {
     FileStorage file_storage ( config_file_name, FileStorage::READ );
+    if ( file_storage["FrameFolder"].empty() || !Utils::FileExists ( file_storage["FrameFolder"] ) )
+    {
+        options->save_valid_frames = false;
+    }
+    else
+    {
+        options->save_valid_frames = true;
+        options->save_frames_folder = ( string ) file_storage["FrameFolder"];
+    }
     options->frame_gap = file_storage["FrameGap"];
     options->dictionary = aruco::getPredefinedDictionary ( file_storage["ArucoDictionary"] );
     options->charuco_board = aruco::CharucoBoard::create ( file_storage["BoardSize.x"], file_storage["BoardSize.y"], file_storage["SquareSize"], file_storage["MarkerSize"], options->dictionary );

@@ -9,6 +9,8 @@ using namespace std;
 using namespace cv;
 
 struct CameraSystemCalibrationOptions {
+    bool save_valid_frames;
+    string save_frames_folder;
     double frame_gap; // Gap between frames to check in seconds
     Ptr<aruco::Dictionary> dictionary;
     Ptr<aruco::CharucoBoard> charuco_board;
@@ -29,6 +31,7 @@ struct Frame {
     Mat flatten_board_corners_64; // N x 3 x 64FC1
     Mat flatten_reprojected_corners_64; // N x 3 x 64FC1
     Mat transform; // 3 x 4 x 64FC1
+    double reprojection_error;
 };
 
 #endif // STRUCT_H

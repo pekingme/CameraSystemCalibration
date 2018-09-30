@@ -68,9 +68,6 @@ void CameraCalibration::Calibrate()
     // Calculates poly parameters and t3 together.
     CalculatePolyAndT3();
 
-    // Prints current calibration parameters
-    _camera.PrintCameraParameters ( "\t" );
-
     // Calculates inverse poly parameters.
     CalculateInversePolyFromPoly();
 
@@ -347,7 +344,7 @@ void CameraCalibration::CalculateInversePolyFromPoly()
     // Solves ceres problem.
     ceres::Solver::Options options;
     options.num_threads = 4;
-    options.max_num_iterations = 200;
+    options.max_num_iterations = 1000;
     if ( _ceres_details_enabled )
     {
         options.minimizer_progress_to_stdout = true;
@@ -362,9 +359,19 @@ void CameraCalibration::CalculateInversePolyFromPoly()
     _camera.SetInversePolyParameters ( inverse_poly_parameters );
 }
 
-void CameraCalibration::RejectFrames ( const double average_bound, const double deviation_bound )
+int CameraCalibration::RejectFrames ( const double average_bound, const double deviation_bound )
 {
-//TODO
+    int rejection_count = 0;
+    for ( unsigned i=0; i<_valid_frames.size(); i++ )
+    {
+        Frame* f = &_valid_frames[i];
+        if ( f->valid && f->reprojection_error > average_bound )
+        {
+            f->valid = false;
+            rejection_count ++;
+        }
+    }
+    return rejection_count;
 }
 
 void CameraCalibration::OptimizeFully()
@@ -388,10 +395,25 @@ void CameraCalibration::OptimizeFully()
         all_rotations[i] = rotation_vector;
         all_translations[i] = translation_vector;
 
-        ceres::CostFunction* cost_function = ErrorToOptimizeFully::Create ( frame.flatten_detected_corners_64, frame.flatten_board_corners_64 );
-        ceres::LossFunction* loss_function = new ceres::CauchyLoss ( 1.0 );
-        problem.AddResidualBlock ( cost_function, loss_function, intrinsic_parameters,
-                                   ( double* ) all_rotations[i].data, ( double* ) all_translations[i].data );
+//         ceres::CostFunction* cost_function = ErrorToOptimizeFully::Create ( frame.flatten_detected_corners_64, frame.flatten_board_corners_64 );
+//         ceres::LossFunction* loss_function = new ceres::CauchyLoss ( 1.0 );
+//         problem.AddResidualBlock ( cost_function, NULL, intrinsic_parameters,
+//                                    ( double* ) all_rotations[i].data, ( double* ) all_translations[i].data );
+
+//         ceres::CostFunction* cost_function = ErrorToOptimizeFully2::Create ( frame.flatten_detected_corners_64, frame.flatten_board_corners_64 );
+//         ceres::LossFunction* loss_function = new ceres::CauchyLoss ( 1.0 );
+//         problem.AddResidualBlock ( cost_function, loss_function, intrinsic_parameters, intrinsic_parameters+INV_POLY_START,
+//                                    ( double* ) all_rotations[i].data, ( double* ) all_translations[i].data );
+
+        for ( unsigned r=0; r<frame.corner_count; r++ )
+        {
+            Vec2d detected_corner = Vec2d ( frame.flatten_detected_corners_64.row ( r ) );
+            Vec3d board_corner = Vec3d ( frame.flatten_board_corners_64.row ( r ) );
+            ceres::CostFunction* cost_function = ErrorToOptimizeFully3::Create ( detected_corner, board_corner );
+            ceres::LossFunction* loss_function = new ceres::CauchyLoss ( 1.0 );
+            problem.AddResidualBlock ( cost_function, loss_function, intrinsic_parameters,
+                                       ( double* ) all_rotations[i].data, ( double* ) all_translations[i].data );
+        }
     }
     // Solves ceres problem.
     ceres::Solver::Options options;
@@ -439,13 +461,13 @@ void CameraCalibration::CalculatePolyFromInversePoly()
     ceres::Problem problem;
     for ( double theta=-M_PI_2; theta<max_theta; theta+=0.01 )
     {
-        ceres::CostFunction* cost_function = ErrorToUpdatePoly::Create ( inverse_poly_parameters, poly_parameters, theta);
-	problem.AddResidualBlock(cost_function, NULL, poly_factors);
+        ceres::CostFunction* cost_function = ErrorToUpdatePoly::Create ( inverse_poly_parameters, poly_parameters, theta );
+        problem.AddResidualBlock ( cost_function, NULL, poly_factors );
     }
     // Solves ceres problem.
     ceres::Solver::Options options;
     options.num_threads = 4;
-    options.max_num_iterations = 200;
+    options.max_num_iterations = 1000;
     if ( _ceres_details_enabled )
     {
         options.minimizer_progress_to_stdout = true;
@@ -457,10 +479,11 @@ void CameraCalibration::CalculatePolyFromInversePoly()
         cout << summary.FullReport() << endl;
     }
     // Updates poly parameters.
-    for(int i=0;i<POLY_SIZE;i++){
-      poly_parameters[i] *= poly_factors[i];
+    for ( int i=0; i<POLY_SIZE; i++ )
+    {
+        poly_parameters[i] *= poly_factors[i];
     }
-    _camera.SetPolyParameters(poly_parameters);
+    _camera.SetPolyParameters ( poly_parameters );
 }
 
 double CameraCalibration::Reproject()
@@ -488,12 +511,28 @@ double CameraCalibration::Reproject()
         reprojected_corners_32.convertTo ( frame->reprojected_corners_32, CV_32FC2 );
         // Accumulates reprojection error.
         Mat reprojection_error = frame->flatten_reprojected_corners_64 - frame->flatten_detected_corners_64;
+        double error_in_frame = 0.0;
         for ( unsigned r=0; r<frame->corner_count; r++ )
         {
-            error_sum += norm ( reprojection_error.row ( r ) );
+            error_in_frame += norm ( reprojection_error.row ( r ) );
         }
+        frame->reprojection_error = error_in_frame / frame->corner_count;
+        error_sum += error_in_frame;
         corners_count += frame->corner_count;
     }
 
     return error_sum / corners_count;
 }
+
+void CameraCalibration::SaveAllValidFrames ( const string& folder, bool draw_detected, bool draw_reprojected )
+{
+    for ( unsigned i=0; i<_valid_frames.size(); i++ )
+    {
+        Frame frame = _valid_frames[i];
+        if ( frame.valid )
+        {
+            Utils::SaveFrame ( folder, frame, draw_detected, draw_reprojected );
+        }
+    }
+}
+

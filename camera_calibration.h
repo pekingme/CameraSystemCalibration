@@ -28,13 +28,16 @@ public:
     void Calibrate();
     
     // Rejects frames with very big error.
-    void RejectFrames(const double average_bound, const double deviation_bound);
+    int RejectFrames(const double average_bound, const double deviation_bound);
     
     // Optimizes intrinsic and extrinsic parameters.
     void OptimizeFully();
     
     // Calculates and return reprojection error per corner of current calibration result.
     double Reproject();
+    
+    // Saves all valid frames with/without detected corners and/or reprojected corners.
+    void SaveAllValidFrames(const string& folder, bool draw_detected, bool draw_reprojected);
 	
     Camera* GetCameraPtr() {
         return &_camera;

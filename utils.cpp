@@ -14,19 +14,36 @@ bool Utils::FileExists ( const string& filename )
     }
 }
 
-void Utils::ShowFrameInWindow ( const string& window_name, const Frame& frame, const bool draw_corners, const bool draw_reprojections )
+void Utils::ShowFrameInWindow ( const string& window_name, const Frame& frame, const bool draw_detected, const bool draw_reprojected )
 {
     Mat canvas_mat;
     frame.original_frame.copyTo ( canvas_mat );
-    if ( draw_corners )
+    if ( draw_detected && !frame.detected_corners_32.empty() )
     {
         aruco::drawDetectedCornersCharuco ( canvas_mat, frame.detected_corners_32, frame.corner_ids, Scalar ( 0, 0, 255 ) );
     }
-    if ( draw_reprojections )
+    if ( draw_reprojected && !frame.reprojected_corners_32.empty() )
     {
-        //TODO draw reprojections
+        aruco::drawDetectedCornersCharuco ( canvas_mat, frame.reprojected_corners_32, frame.corner_ids, Scalar ( 255, 0, 0 ) );
     }
     imshow ( window_name, canvas_mat );
+}
+
+void Utils::SaveFrame ( const string& folder, const Frame& frame, const bool draw_detected, const bool draw_reprojected )
+{
+    Mat canvas_mat;
+    frame.original_frame.copyTo ( canvas_mat );
+    if ( draw_detected && !frame.detected_corners_32.empty() )
+    {
+        aruco::drawDetectedCornersCharuco ( canvas_mat, frame.detected_corners_32, frame.corner_ids, Scalar ( 0, 0, 255 ) );
+    }
+    if ( draw_reprojected && !frame.reprojected_corners_32.empty() )
+    {
+        aruco::drawDetectedCornersCharuco ( canvas_mat, frame.reprojected_corners_32, frame.corner_ids, Scalar ( 255, 0, 0 ) );
+    }
+    rectangle ( canvas_mat, Point ( 0, 0 ), Point ( canvas_mat.cols, 40 ), Scalar ( 255, 255, 255 ), CV_FILLED );
+    putText ( canvas_mat, "Average reprojection error = "+to_string ( frame.reprojection_error ), Point ( 5, 35 ),  CV_FONT_HERSHEY_SIMPLEX, 1, Scalar ( 255, 0, 0 ), 2 );
+    imwrite ( folder + frame.camera_name + "-" + to_string ( frame.global_index ) + ".jpg", canvas_mat );
 }
 
 Mat Utils::GetCharucoBoardCornersMatFromVector ( const Mat& corner_ids, const vector< Point3f >& point_vector )
@@ -129,3 +146,39 @@ void Utils::ReprojectCornersInFrame ( const double* intrinsics, const double* ro
         reprojected_corners->at<double> ( i, 1 ) = affine_e * corner_u + corner_v + v0;
     }
 }
+
+void Utils::ReprojectSingleCorner ( const double* intrinsics, const double* rotation_vector_data,
+                                    const double* translation_vector_data, const Vec3d& board_corner, Vec2d* reprojected_corner )
+{
+    Vec3d rotation_vector ( rotation_vector_data[0], rotation_vector_data[1], rotation_vector_data[2] );
+    Vec3d translation_vector ( translation_vector_data[0], translation_vector_data[1], translation_vector_data[2] );
+    Mat rotation_matrix;
+    Rodrigues ( rotation_vector, rotation_matrix );
+    Vec3d board_corner_in_camera ( ( double* ) Mat ( rotation_matrix * Mat ( board_corner ) + Mat ( translation_vector ) ).data );
+
+    double affine_c = intrinsics[0];
+    double affine_d = intrinsics[1];
+    double affine_e = intrinsics[2];
+    double u0 = intrinsics[3];
+    double v0 = intrinsics[4];
+    double inverse_poly[INV_POLY_SIZE];
+    copy ( intrinsics+INV_POLY_START, intrinsics+INV_POLY_START+INV_POLY_SIZE, inverse_poly );
+
+    // Calculates norm on xy plane.
+    double norm_on_xy_2 = board_corner_in_camera[0] * board_corner_in_camera[0] + board_corner_in_camera[1] * board_corner_in_camera[1];
+    double norm_on_xy = 0.0;
+    if ( norm_on_xy_2 > 0.0 )
+    {
+        norm_on_xy = sqrt ( norm_on_xy_2 );
+    }
+    // Calculates projected position on the frame.
+    double theta = atan2 ( board_corner_in_camera[2], norm_on_xy );
+    double rho = EvaluatePolyEquation ( inverse_poly, INV_POLY_SIZE, theta );
+    // u, v of corner on frame without affine.
+    double corner_u = board_corner_in_camera[0] / norm_on_xy * rho;
+    double corner_v = board_corner_in_camera[1] / norm_on_xy * rho;
+    // Affines corner on frame.
+    ( *reprojected_corner ) [0] = affine_c * corner_u + affine_d * corner_v + u0;
+    ( *reprojected_corner ) [1] = affine_e * corner_u + corner_v + v0;
+}
+
