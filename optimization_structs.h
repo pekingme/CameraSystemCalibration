@@ -26,8 +26,14 @@ public:
     }
 
     bool operator() ( const double* poly, const double* t3, double* residuals ) const {
-        residuals[0] = poly[0] * a + poly[2] * a * rho_powers[2] + poly[3] * a * rho_powers[3] + poly[4] * a * rho_powers[4] - t3[0] * detected_corner[1] - b;
-        residuals[1] = poly[0] * c + poly[2] * c * rho_powers[2] + poly[3] * c * rho_powers[3] + poly[4] * c * rho_powers[4] - t3[0] * detected_corner[0] - d;
+        double constraint_1 = poly[2] * 2 * rho_powers[1] + poly[3] * 3 * rho_powers[2] + poly[4] * 4 * rho_powers[3];
+        double constraint_2 = poly[2] * 2 + poly[3] * 6 * rho_powers[1] + poly[4] * 12 * rho_powers[2];
+        if ( constraint_1 < 0 || constraint_2 < 0 ) {
+            residuals[0] = residuals[1] = 1e100;
+        } else {
+            residuals[0] = poly[0] * a + poly[2] * a * rho_powers[2] + poly[3] * a * rho_powers[3] + poly[4] * a * rho_powers[4] - t3[0] * detected_corner[1] - b;
+            residuals[1] = poly[0] * c + poly[2] * c * rho_powers[2] + poly[3] * c * rho_powers[3] + poly[4] * c * rho_powers[4] - t3[0] * detected_corner[0] - d;
+        }
         return true;
     }
 

@@ -129,18 +129,17 @@ void Utils::ReprojectCornersInFrame ( const double* intrinsics, const double* ro
         double corner_y = flatten_board_corners_in_camera.at<double> ( i, 1 );
         double corner_z = flatten_board_corners_in_camera.at<double> ( i, 2 );
         // Calculates norm on xy plane.
-        double norm_on_xy_2 = corner_x * corner_x + corner_y * corner_y;
-        double norm_on_xy = 0.0;
-        if ( norm_on_xy_2 > 0.0 )
+        double norm_on_xy = sqrt ( corner_x * corner_x + corner_y * corner_y );
+        if ( norm_on_xy == 0.0 )
         {
-            norm_on_xy = sqrt ( norm_on_xy_2 );
+            norm_on_xy = 1e-14;
         }
         // Calculates projected position on the frame.
         double theta = atan2 ( corner_z, norm_on_xy );
         double rho = EvaluatePolyEquation ( inverse_poly, INV_POLY_SIZE, theta );
         // u, v of corner on frame without affine.
-        double corner_u = corner_x / norm_on_xy * rho;
-        double corner_v = corner_y / norm_on_xy * rho;
+        double corner_u = corner_x * rho / norm_on_xy;
+        double corner_v = corner_y * rho / norm_on_xy;
         // Affines corner on frame.
         reprojected_corners->at<double> ( i, 0 ) = affine_c * corner_u + affine_d * corner_v + u0;
         reprojected_corners->at<double> ( i, 1 ) = affine_e * corner_u + corner_v + v0;
@@ -165,18 +164,17 @@ void Utils::ReprojectSingleCorner ( const double* intrinsics, const double* rota
     copy ( intrinsics+INV_POLY_START, intrinsics+INV_POLY_START+INV_POLY_SIZE, inverse_poly );
 
     // Calculates norm on xy plane.
-    double norm_on_xy_2 = board_corner_in_camera[0] * board_corner_in_camera[0] + board_corner_in_camera[1] * board_corner_in_camera[1];
-    double norm_on_xy = 0.0;
-    if ( norm_on_xy_2 > 0.0 )
+    double norm_on_xy = sqrt ( board_corner_in_camera[0] * board_corner_in_camera[0] + board_corner_in_camera[1] * board_corner_in_camera[1] );
+    if ( norm_on_xy == 0.0 )
     {
-        norm_on_xy = sqrt ( norm_on_xy_2 );
+        norm_on_xy = 1e-14;
     }
     // Calculates projected position on the frame.
     double theta = atan2 ( board_corner_in_camera[2], norm_on_xy );
     double rho = EvaluatePolyEquation ( inverse_poly, INV_POLY_SIZE, theta );
     // u, v of corner on frame without affine.
-    double corner_u = board_corner_in_camera[0] / norm_on_xy * rho;
-    double corner_v = board_corner_in_camera[1] / norm_on_xy * rho;
+    double corner_u = board_corner_in_camera[0] * rho / norm_on_xy;
+    double corner_v = board_corner_in_camera[1] * rho / norm_on_xy;
     // Affines corner on frame.
     ( *reprojected_corner ) [0] = affine_c * corner_u + affine_d * corner_v + u0;
     ( *reprojected_corner ) [1] = affine_e * corner_u + corner_v + v0;
