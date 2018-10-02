@@ -2,8 +2,8 @@
 #include "video_synchronizer.h"
 #include "utils.h"
 
-CameraSystemCalibration::CameraSystemCalibration ( const string& output_file_name, const string& config_file_name, const string& detector_file_name )
-    : _output_file_name ( output_file_name )
+CameraSystemCalibration::CameraSystemCalibration ( const string& output_file_name, const string& config_file_name, const string& detector_file_name, const bool ceres_details_enabled )
+    : _output_file_name ( output_file_name ), _ceres_details_enabled ( ceres_details_enabled )
 {
     cout << "Preparing camera calibration system ..." << endl;
 
@@ -44,7 +44,7 @@ CameraSystemCalibration::CameraSystemCalibration ( const string& output_file_nam
     // Creates single camera calibration.
     for ( unsigned i=0; i<_synchronized_video_clips.size(); i++ )
     {
-        _camera_calibrations.push_back ( CameraCalibration ( _synchronized_video_clips[i].GetCameraName(), _options, true ) );
+        _camera_calibrations.push_back ( CameraCalibration ( _synchronized_video_clips[i].GetCameraName(), _options, ceres_details_enabled ) );
     }
     cout << "... Done." << endl;
 }
@@ -128,7 +128,12 @@ void CameraSystemCalibration::Calibrate()
     CalibrateMonoCameras();
     AlignCamerasAndBoards();
     OptimizeExtrinsics();
-    Reproject();
+    cout << endl << "Average reprojection error from shared frames is " << Reproject() << endl;
+    for(unsigned i=0;i<_camera_calibrations.size();i++){
+      CameraCalibration* camera_calibration = &_camera_calibrations[i];
+      string camera_tag = "C"+camera_calibration->GetCameraName();
+      cout << endl << camera_calibration->GetCameraName() << ": " << endl << _vertex_pose_map[camera_tag] << endl;
+    }
 }
 
 void CameraSystemCalibration::CalibrateMonoCameras()
@@ -137,17 +142,24 @@ void CameraSystemCalibration::CalibrateMonoCameras()
 
     for ( unsigned c=0; c<_camera_calibrations.size(); c++ )
     {
-	CameraCalibration* camera_calibration = &_camera_calibrations[c];
+        CameraCalibration* camera_calibration = &_camera_calibrations[c];
         cout << endl << "\t\tCalibrating camera [" << camera_calibration->GetCameraPtr()->GetName() << "] ..." << endl;
-	
+
         camera_calibration->Calibrate();
-        cout << "\t\tAverage reprojection error after initial calibration is " << camera_calibration->Reproject() << endl;
+        double reprojection_error = camera_calibration->Reproject();
+        cout << "\t\tAverage reprojection error after initial calibration is " << reprojection_error << endl;
         do
         {
             camera_calibration->OptimizeFully();
-            cout << "\t\tAverage reprojection error after non-linear optimization is " << camera_calibration->Reproject() << endl;
+            reprojection_error = camera_calibration->Reproject();
+            cout << "\t\tAverage reprojection error after non-linear optimization is " << reprojection_error << endl;
         }
         while ( camera_calibration->RejectFrames ( 10, 1000 ) > 0 );
+
+        if ( reprojection_error > 1.0 )
+        {
+            cout << endl << "\t\tAverage reprojection error is greater than 1.0 px. Mono calibration result may be not accurate enough." << endl;
+        }
 
         if ( _options.save_valid_frames )
         {
@@ -155,22 +167,212 @@ void CameraSystemCalibration::CalibrateMonoCameras()
         }
     }
 
-    cout << "... Done." << endl;
+    cout << "\t... Done." << endl;
 }
 
 void CameraSystemCalibration::AlignCamerasAndBoards()
 {
-// TODO
+    cout << endl << "\tAligning cameras and valid frames initially ..." << endl;
+    // Initializes the backward edges from frame to camera; forward edges are stored as valid frame in camera calibration.
+    unordered_map<unsigned, vector<unsigned>> frame_to_camera;
+    for ( unsigned i=0; i<_camera_calibrations.size(); i++ )
+    {
+        CameraCalibration* camera_calibration = &_camera_calibrations[i];
+        vector<Frame>* valid_frames = camera_calibration->GetValidFramesPtr();
+        for ( unsigned j=0; j<valid_frames->size(); j++ )
+        {
+            Frame* frame = & ( *valid_frames ) [j];
+            frame_to_camera[frame->global_index].push_back ( i );
+        }
+    }
+    // Determines initial poses using BFS starting from the first camera.
+    bool is_camera_vertex = true;
+    queue<unsigned> visiting_vertex;
+    queue<Mat> visiting_pose;
+    visiting_vertex.push ( 0 );
+    visiting_pose.push ( Mat::eye ( 4, 4, CV_64FC1 ) );
+    while ( !visiting_vertex.empty() )
+    {
+        unsigned level_size = visiting_vertex.size();
+        for ( unsigned i=0; i<level_size; i++ )
+        {
+            if ( is_camera_vertex )
+            {
+                unsigned camera_index = visiting_vertex.front();
+                visiting_vertex.pop();
+                Mat camera_pose = visiting_pose.front();
+                visiting_pose.pop();
+                CameraCalibration* camera_calibration = &_camera_calibrations[camera_index];
+                string camera_tag = "C"+camera_calibration->GetCameraName();
+                _vertex_pose_map[camera_tag] = camera_pose;
+                // Collects next level.
+                vector<Frame>* valid_frames = camera_calibration->GetValidFramesPtr();
+                for ( unsigned j=0; j<valid_frames->size(); j++ )
+                {
+                    Frame* frame = & ( *valid_frames ) [j];
+                    string frame_tag = "F" + to_string ( frame->global_index );
+                    if ( _vertex_pose_map.find ( frame_tag ) == _vertex_pose_map.end() )
+                    {
+                        visiting_vertex.push ( frame->global_index );
+                        // The frame transform matrix F, so that pt_world = F * pt_frame.
+                        visiting_pose.push ( camera_pose.inv() * Utils::GetTransform44From34 ( frame->transform ) );
+                    }
+                }
+            }
+            else
+            {
+                unsigned frame_global_index = visiting_vertex.front();
+                visiting_vertex.pop();
+                Mat frame_pose = visiting_pose.front();
+                visiting_pose.pop();
+                vector<unsigned> captured_cameras = frame_to_camera[frame_global_index];
+                // Only keeps shared frames.
+                if ( captured_cameras.size() > 1 )
+                {
+                    string frame_tag = "F"+to_string ( frame_global_index );
+                    _vertex_pose_map[frame_tag] = frame_pose;
+                    // Collects next level.
+                    for ( unsigned j=0; j<captured_cameras.size(); j++ )
+                    {
+                        unsigned camera_index = captured_cameras[j];
+                        CameraCalibration* camera_calibration = &_camera_calibrations[camera_index];
+                        string camera_tag = "C"+camera_calibration->GetCameraName();
+                        if ( _vertex_pose_map.find ( camera_tag ) ==_vertex_pose_map.end() )
+                        {
+                            Frame* frame = camera_calibration->GetFrameWithGloablIndex ( frame_global_index );
+                            visiting_vertex.push ( camera_index );
+                            // The camera transform matrix C, so that pt_camera = C * pt_world.
+                            visiting_pose.push ( Utils::GetTransform44From34 ( frame->transform ) * frame_pose.inv() );
+                        }
+                    }
+                }
+            }
+        }
+        is_camera_vertex = !is_camera_vertex;
+    }
+    // Checks connectivity: whether all cameras are covered.
+    for ( unsigned i=0; i<_camera_calibrations.size(); i++ )
+    {
+        CameraCalibration* camera_calibration = &_camera_calibrations[i];
+        string camera_tag = "C"+camera_calibration->GetCameraName();
+        if ( _vertex_pose_map.find ( camera_tag ) == _vertex_pose_map.end() )
+        {
+            cerr << "Camera ["<<camera_calibration->GetCameraName() << "] doesn't share any valid frame with other cameras." << endl;
+            exit ( -1 );
+        }
+    }
+
+    cout << endl << "... Done." << endl;
 }
 
 void CameraSystemCalibration::OptimizeExtrinsics()
 {
-// TODO
+    cout << endl << "\tOptimizing extrinsic parameters of all known vertices (cameras and frames) ..." << endl;
+    // Collects all extrainsic
+    unordered_map<string, Mat> all_rotation_vectors, all_translation_vectors;
+    // Forms up the ceres problem.
+    ceres::Problem problem;
+    for ( unsigned i=0; i<_camera_calibrations.size(); i++ )
+    {
+        CameraCalibration* camera_calibration = &_camera_calibrations[i];
+        double intrinsics[TOTAL_SIZE];
+        camera_calibration->GetCameraPtr()->GetIntrinsicParameters ( intrinsics );
+        string camera_tag = "C"+camera_calibration->GetCameraName();
+        Mat* camera_pose = &_vertex_pose_map[camera_tag];
+        Mat camera_rotation_vector, camera_translation_vector;
+        Utils::GetRAndTVectorsFromTransform ( camera_pose->rowRange ( 0, 3 ), &camera_rotation_vector, &camera_translation_vector );
+        all_rotation_vectors[camera_tag] = camera_rotation_vector;
+        all_translation_vectors[camera_tag] = camera_translation_vector;
+
+        vector<Frame>* valid_frames = camera_calibration->GetValidFramesPtr();
+        for ( unsigned j=0; j<valid_frames->size(); j++ )
+        {
+            Frame* frame = & ( *valid_frames ) [j];
+            string frame_tag = "F"+frame->global_index;
+            if ( _vertex_pose_map.find ( frame_tag ) != _vertex_pose_map.end() )
+            {
+                Mat frame_pose = _vertex_pose_map[frame_tag];
+                Mat frame_rotation_vector, frame_translation_vector;
+                Utils::GetRAndTVectorsFromTransform ( frame_pose.rowRange ( 0, 3 ), &frame_rotation_vector, &frame_translation_vector );
+                all_rotation_vectors[frame_tag] = frame_rotation_vector;
+                all_translation_vectors[frame_tag] = frame_translation_vector;
+
+                for ( unsigned k=0; k<frame->corner_count; k++ )
+                {
+                    Vec2d detected_corner = Vec2d ( frame->flatten_detected_corners_64.row ( k ) );
+                    Vec3d board_corner = Vec3d ( frame->flatten_board_corners_64.row ( k ) );
+                    ceres::CostFunction* cost_function = ErrorToOptimizeSystemExtrinsics::Create ( detected_corner, board_corner, intrinsics );
+                    problem.AddResidualBlock ( cost_function, NULL,
+                                               ( double* ) all_rotation_vectors[camera_tag].data, ( double* ) all_translation_vectors[camera_tag].data,
+                                               ( double* ) all_rotation_vectors[frame_tag].data, ( double* ) all_translation_vectors[frame_tag].data );
+                }
+            }
+        }
+    }
+    // Solves ceres problem.
+    ceres::Solver::Options options;
+    options.num_threads = 4;
+    options.max_num_iterations = 1000;
+    if ( _ceres_details_enabled )
+    {
+        options.minimizer_progress_to_stdout = true;
+    }
+    ceres::Solver::Summary summary;
+    Solve ( options, &problem, &summary );
+    if ( _ceres_details_enabled )
+    {
+        cout << summary.FullReport() << endl;
+    }
+    // Updates poses of vertices.
+    for ( auto it=_vertex_pose_map.begin(); it!=_vertex_pose_map.end(); ++it )
+    {
+        string vertex_tag = it->first;
+        Mat transform;
+        Utils::GetTransformFromRAndTVectors ( all_rotation_vectors[vertex_tag], all_translation_vectors[vertex_tag], &transform );
+        transform.copyTo ( _vertex_pose_map[vertex_tag].rowRange ( 0, 3 ) );
+    }
+
+    cout << endl << "\t... Done." << endl;
 }
 
-void CameraSystemCalibration::Reproject()
+double CameraSystemCalibration::Reproject()
 {
-// TODO
+    double error_sum = 0.0;
+    int corners_count = 0;
+    for ( unsigned i=0; i<_camera_calibrations.size(); i++ )
+    {
+        CameraCalibration* camera_calibration = &_camera_calibrations[i];
+        string camera_tag = "C"+camera_calibration->GetCameraName();
+        double intrinsics[TOTAL_SIZE];
+        camera_calibration->GetCameraPtr()->GetIntrinsicParameters ( intrinsics );
+        vector<Frame>* valid_frames = camera_calibration->GetValidFramesPtr();
+        Mat camera_transform = _vertex_pose_map[camera_tag];
+        for ( unsigned j=0; j<valid_frames->size(); j++ )
+        {
+            Frame* frame = & ( *valid_frames ) [j];
+            string frame_tag = "F"+frame->global_index;
+            if ( _vertex_pose_map.find ( frame_tag ) != _vertex_pose_map.end() )
+            {
+                Mat frame_transform = _vertex_pose_map[frame_tag];
+                Mat local_transform = camera_transform * frame_transform;
+                Mat local_rotation_vector, local_translation_vector, reprojected_corners;
+                Utils::GetRAndTVectorsFromTransform ( local_transform, &local_rotation_vector, &local_translation_vector );
+                Utils::ReprojectCornersInFrame ( intrinsics, ( double* ) local_rotation_vector.data, ( double* ) local_translation_vector.data,
+                                                 frame->flatten_board_corners_64, &reprojected_corners );
+                // Accumulates reprojection error.
+                Mat reprojection_error = reprojected_corners - frame->flatten_detected_corners_64;
+                double error_in_frame = 0.0;
+                for ( unsigned r=0; r<frame->corner_count; r++ )
+                {
+                    error_in_frame += norm ( reprojection_error.row ( r ) );
+                }
+                error_sum += error_in_frame;
+                corners_count += frame->corner_count;
+            }
+        }
+    }
+
+    return error_sum / corners_count;
 }
 
 void CameraSystemCalibration::ReadVideoFileAndCameraNames ( const string& config_file_name, vector< string >* camera_names, vector< string >* video_file_names )

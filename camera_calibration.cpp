@@ -35,7 +35,7 @@ bool CameraCalibration::ExtractCornersAndSave ( Frame* frame )
     frame->transform = Mat::zeros ( 3, 4, CV_64FC1 );
     frame->valid = true;
 
-    _valid_frame_set.insert ( frame->global_index );
+    _global_to_local_map[frame->global_index] = _valid_frames.size();
     _valid_frames.push_back ( *frame );
 
     return true;
@@ -43,7 +43,7 @@ bool CameraCalibration::ExtractCornersAndSave ( Frame* frame )
 
 void CameraCalibration::Calibrate()
 {
-    if ( _valid_frame_set.size() == 0 )
+    if ( _global_to_local_map.size() == 0 )
     {
         cerr << "No valid frames are found for mono calibration." << endl;
         exit ( -1 );
@@ -65,18 +65,17 @@ void CameraCalibration::Calibrate()
             continue;
         }
     }
+    // Removes invalid frames from _valid_frames.
+    RemoveInvalidFrames();
+    
     // Calculates poly parameters and t3 together.
     CalculatePolyAndT3();
 
     // Calculates inverse poly parameters.
     CalculateInversePolyFromPoly();
 
-//     for(unsigned i=0;i<_valid_frames.size();i++){
-//       cout << endl << _valid_frames[i].transform << endl;
-//     }
-
     // Prints current calibration parameters
-    _camera.PrintCameraParameters ( "\t" );
+    _camera.PrintCameraParameters ( "\t\t" );
 }
 
 void CameraCalibration::CalculateInitialTransforms ( const Frame& frame, Mat* u, Mat* v, Mat* x, Mat* y, vector< Mat >* transforms )
@@ -371,6 +370,9 @@ int CameraCalibration::RejectFrames ( const double average_bound, const double d
             rejection_count ++;
         }
     }
+    // Removes rejected frames.
+    RemoveInvalidFrames();
+    
     return rejection_count;
 }
 
@@ -444,7 +446,7 @@ void CameraCalibration::OptimizeFully()
     CalculatePolyFromInversePoly();
 
     // Prints current calibration parameters
-    _camera.PrintCameraParameters ( "\t" );
+    _camera.PrintCameraParameters ( "\t\t" );
 }
 
 void CameraCalibration::CalculatePolyFromInversePoly()
@@ -524,6 +526,21 @@ double CameraCalibration::Reproject()
     return error_sum / corners_count;
 }
 
+void CameraCalibration::RemoveInvalidFrames()
+{
+  vector<Frame> effective_valid_frames;
+  unordered_map<unsigned, unsigned> effective_global_to_local_map;
+  for(unsigned i=0;i<_valid_frames.size();i++){
+    Frame* frame = &_valid_frames[i];
+    if(frame->valid){
+      effective_global_to_local_map[frame->global_index] = effective_valid_frames.size();
+      effective_valid_frames.push_back(*frame);
+    }
+  }
+  _global_to_local_map.swap(effective_global_to_local_map);
+  _valid_frames.swap(effective_valid_frames);
+}
+
 void CameraCalibration::SaveAllValidFrames ( const string& folder, bool draw_detected, bool draw_reprojected )
 {
     for ( unsigned i=0; i<_valid_frames.size(); i++ )
@@ -535,4 +552,3 @@ void CameraCalibration::SaveAllValidFrames ( const string& folder, bool draw_det
         }
     }
 }
-

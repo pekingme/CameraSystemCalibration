@@ -37,6 +37,9 @@ public:
 
     // Forms up 3 x 4 transform matrix from rotation vector and translation vector.
     static void GetTransformFromRAndTVectors ( const Mat& r_mat, const Mat& t_mat, Mat* transform );
+    
+    // Get transfrom matrix 4 x 4 from transfrom 3 x 4.
+    static Mat GetTransform44From34(const Mat& transform);
 
     // Reprojects the board corners in the frame based on input intrinsic and extrinsic parameters.
     static void ReprojectCornersInFrame ( const double* intrinsics, const double* rotation_vector_data, const double* translation_vector_data,

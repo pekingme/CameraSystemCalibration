@@ -100,6 +100,14 @@ void Utils::GetTransformFromRAndTVectors ( const Mat& r_mat, const Mat& t_mat, M
     t_mat.copyTo ( transform->col ( 3 ) );
 }
 
+Mat Utils::GetTransform44From34 ( const Mat& transform_3_4 )
+{
+    CV_Assert ( transform_3_4.rows == 3 && transform_3_4.cols == 4 );
+    Mat transform_4_4 = Mat::eye ( 4, 4, transform_3_4.type() );
+    transform_3_4.copyTo ( transform_4_4.rowRange ( 0, 3 ) );
+    return transform_4_4;
+}
+
 void Utils::ReprojectCornersInFrame ( const double* intrinsics, const double* rotation_vector_data,
                                       const double* translation_vector_data, const Mat& flatten_board_corners,
                                       Mat* reprojected_corners )

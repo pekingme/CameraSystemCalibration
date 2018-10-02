@@ -36,7 +36,7 @@ int main ( int argc, char** argv )
         return 0;
     }
 
-    CameraSystemCalibration camera_system_calibration (output_file_name, config_file_name, detector_file_name);
+    CameraSystemCalibration camera_system_calibration (output_file_name, config_file_name, detector_file_name, true);
     camera_system_calibration.FetchCornersInFrames();
     camera_system_calibration.Calibrate();
     

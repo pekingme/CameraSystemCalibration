@@ -3,6 +3,8 @@
 
 #include <string>
 #include <vector>
+#include <queue>
+#include <unordered_map>
 #include "structs.h"
 #include "video_clip.h"
 #include "camera_calibration.h"
@@ -15,10 +17,13 @@ using namespace cv;
 class CameraSystemCalibration
 {
 public:
-    CameraSystemCalibration ( const string& output_file_name, const string& config_file_name, const string& detector_file_name );
+    CameraSystemCalibration ( const string& output_file_name, const string& config_file_name, const string& detector_file_name, const bool ceres_details_enabled );
     ~CameraSystemCalibration() {};
     
+    // Extract charuco corners from sampled frames of videos.
     void FetchCornersInFrames();
+    
+    // Calibrates the camera system.
     void Calibrate();
 private:
     // Reads all video file names and camera names from calibration setting file.
@@ -40,12 +45,25 @@ private:
     void OptimizeExtrinsics();
     
     // Calculates reprojection error of current calibration result.
-    void Reproject();
+    double Reproject();
     
+    // File storing final calibration results.
     const string _output_file_name;
+    
+    // Vector of videos used in the calibration.
     vector<VideoClip> _synchronized_video_clips;
+    
+    // Calibration settings.
     CameraSystemCalibrationOptions _options;
+    
+    // Vector of single camera calibration objects.
     vector<CameraCalibration> _camera_calibrations;
+    
+    // Map of poses of all vertices (cameras and frames).
+    unordered_map<string, Mat> _vertex_pose_map;
+    
+    // Toggle ceres progress to console.
+    const bool _ceres_details_enabled;
 };
 
 #endif // CAMERA_SYSTEM_CALIBRATION_H
