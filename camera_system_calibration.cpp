@@ -127,9 +127,9 @@ void CameraSystemCalibration::Calibrate()
     cout << endl << "Calibrating camera system ..." << endl;
     CalibrateMonoCameras();
     AlignCamerasAndBoards();
-    cout << endl << "Average reprojection error from shared frames is " << Reproject() << endl;
+    cout << endl << "\tAverage reprojection error from shared frames is " << Reproject() << endl;
     OptimizeExtrinsics();
-    cout << endl << "Average reprojection error from shared frames is " << Reproject() << endl;
+    cout << endl << "\tAverage reprojection error from shared frames is " << Reproject() << endl;
     for ( unsigned i=0; i<_camera_calibrations.size(); i++ )
     {
         CameraCalibration* camera_calibration = &_camera_calibrations[i];
@@ -275,23 +275,27 @@ void CameraSystemCalibration::AlignCamerasAndBoards()
 void CameraSystemCalibration::OptimizeExtrinsics()
 {
     cout << endl << "\tOptimizing extrinsic parameters of all known vertices (cameras and frames) ..." << endl;
-    // Collects all extrainsic
+    // Collects all intrinsics.
     unordered_map<string, Mat> all_rotation_vectors, all_translation_vectors;
     double all_intrinsics[_camera_calibrations.size()][TOTAL_SIZE];
+    for(unsigned i=0;i<_camera_calibrations.size();i++){
+      CameraCalibration* camera_calibration = &_camera_calibrations[i];
+      camera_calibration->GetCameraPtr()->GetIntrinsicParameters(all_intrinsics[i]);
+    }
+    // Collectws all extrinsics.
+    for(auto it=_vertex_pose_map.begin();it!=_vertex_pose_map.end();++it){
+      Mat rotation_vector, translation_vector;
+      Mat transform_4_4 = it->second;
+      Utils::GetRAndTVectorsFromTransform(transform_4_4.rowRange(0, 3), &rotation_vector, &translation_vector);
+      all_rotation_vectors[it->first] = rotation_vector;
+      all_translation_vectors[it->first] = translation_vector;
+    }
     // Forms up the ceres problem.
     ceres::Problem problem;
     for ( unsigned i=0; i<_camera_calibrations.size(); i++ )
     {
         CameraCalibration* camera_calibration = &_camera_calibrations[i];
-        camera_calibration->GetCameraPtr()->GetIntrinsicParameters ( all_intrinsics[i] );
         string camera_tag = "C"+camera_calibration->GetCameraName();
-
-        Mat* camera_pose = &_vertex_pose_map[camera_tag];
-        Mat camera_rotation_vector, camera_translation_vector;
-        Utils::GetRAndTVectorsFromTransform ( camera_pose->rowRange ( 0, 3 ), &camera_rotation_vector, &camera_translation_vector );
-        all_rotation_vectors[camera_tag] = camera_rotation_vector;
-        all_translation_vectors[camera_tag] = camera_translation_vector;
-
         vector<Frame>* valid_frames = camera_calibration->GetValidFramesPtr();
         for ( unsigned j=0; j<valid_frames->size(); j++ )
         {
@@ -299,12 +303,6 @@ void CameraSystemCalibration::OptimizeExtrinsics()
             string frame_tag = "F"+to_string ( frame->global_index );
             if ( _vertex_pose_map.find ( frame_tag ) != _vertex_pose_map.end() )
             {
-                Mat frame_pose = _vertex_pose_map[frame_tag];
-                Mat frame_rotation_vector, frame_translation_vector;
-                Utils::GetRAndTVectorsFromTransform ( frame_pose.rowRange ( 0, 3 ), &frame_rotation_vector, &frame_translation_vector );
-                all_rotation_vectors[frame_tag] = frame_rotation_vector;
-                all_translation_vectors[frame_tag] = frame_translation_vector;
-
 //                 for ( unsigned k=0; k<frame->corner_count; k++ )
 //                 {
 //                     Vec2d detected_corner = Vec2d ( frame->flatten_detected_corners_64.row ( k ) );

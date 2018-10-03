@@ -251,7 +251,7 @@ public:
     static ceres::CostFunction* Create ( const Mat detected_corners, const Mat board_corners, const double* intrinsics ) {
         return ( new ceres::NumericDiffCostFunction<ErrorToOptimizeSystemExtrinsics2, ceres::CENTRAL, ceres::DYNAMIC, 3, 3, 3, 3> (
                      new ErrorToOptimizeSystemExtrinsics2 ( detected_corners, board_corners, intrinsics ),
-                     ceres::TAKE_OWNERSHIP, detected_corners.total()
+                     ceres::TAKE_OWNERSHIP, detected_corners.rows * 2
                  ) );
     }
 private:
