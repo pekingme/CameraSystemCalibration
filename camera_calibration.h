@@ -11,7 +11,6 @@
 #include "camera.h"
 #include "video_clip.h"
 #include "opencv2/aruco/charuco.hpp"
-#include "ceres/ceres.h"
 
 using namespace cv;
 using namespace std;

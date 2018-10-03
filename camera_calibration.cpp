@@ -307,10 +307,7 @@ void CameraCalibration::CalculatePolyAndT3()
     ceres::Solver::Options options;
     options.num_threads = 4;
     options.max_num_iterations = 1000;
-    if ( _ceres_details_enabled )
-    {
-        options.minimizer_progress_to_stdout = true;
-    }
+    options.minimizer_progress_to_stdout = _ceres_details_enabled;
     ceres::Solver::Summary summary;
     Solve ( options, &problem, &summary );
     if ( _ceres_details_enabled )
@@ -344,10 +341,7 @@ void CameraCalibration::CalculateInversePolyFromPoly()
     ceres::Solver::Options options;
     options.num_threads = 4;
     options.max_num_iterations = 1000;
-    if ( _ceres_details_enabled )
-    {
-        options.minimizer_progress_to_stdout = true;
-    }
+    options.minimizer_progress_to_stdout = _ceres_details_enabled;
     ceres::Solver::Summary summary;
     Solve ( options, &problem, &summary );
     if ( _ceres_details_enabled )
@@ -421,10 +415,7 @@ void CameraCalibration::OptimizeFully()
     ceres::Solver::Options options;
     options.num_threads = 4;
     options.max_num_iterations = 1000;
-    if ( _ceres_details_enabled )
-    {
-        options.minimizer_progress_to_stdout = true;
-    }
+    options.minimizer_progress_to_stdout = _ceres_details_enabled;
     ceres::Solver::Summary summary;
     Solve ( options, &problem, &summary );
     if ( _ceres_details_enabled )
@@ -470,10 +461,7 @@ void CameraCalibration::CalculatePolyFromInversePoly()
     ceres::Solver::Options options;
     options.num_threads = 4;
     options.max_num_iterations = 1000;
-    if ( _ceres_details_enabled )
-    {
-        options.minimizer_progress_to_stdout = true;
-    }
+    options.minimizer_progress_to_stdout = _ceres_details_enabled;
     ceres::Solver::Summary summary;
     Solve ( options, &problem, &summary );
     if ( _ceres_details_enabled )

@@ -5,6 +5,7 @@
 #include <vector>
 #include <queue>
 #include <unordered_map>
+#include <unordered_set>
 #include "structs.h"
 #include "video_clip.h"
 #include "camera_calibration.h"
@@ -25,6 +26,9 @@ public:
     
     // Calibrates the camera system.
     void Calibrate();
+    
+    // Saves calibration results to output file.
+    void SaveResults();
 private:
     // Reads all video file names and camera names from calibration setting file.
     void ReadVideoFileAndCameraNames ( const string& config_file_name, vector<string>* camera_names, vector<string>* video_file_names );

@@ -89,6 +89,8 @@ double Utils::EvaluatePolyEquation ( const double* coefficients, const int n, co
 void Utils::GetRAndTVectorsFromTransform ( const Mat& transform, Mat* r_mat, Mat* t_mat )
 {
     CV_Assert ( transform.rows == 3 && transform.cols == 4 );
+    r_mat->create(3, 1, CV_64FC1);
+    t_mat->create(3, 1, CV_64FC1);
     Rodrigues ( transform.colRange ( 0, 3 ), *r_mat );
     transform.col ( 3 ).copyTo ( *t_mat );
 }
