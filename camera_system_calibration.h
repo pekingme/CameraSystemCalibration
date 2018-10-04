@@ -27,6 +27,9 @@ public:
     // Calibrates the camera system.
     void Calibrate();
     
+    // Repositions all cameras so that first camera is at origin and facing z positive.
+    void RepositionCameras();
+    
     // Saves calibration results to output file.
     void SaveResults();
 private:
@@ -63,11 +66,17 @@ private:
     // Vector of single camera calibration objects.
     vector<CameraCalibration> _camera_calibrations;
     
+    // Vector of camera's transform to camera system center.
+    vector<Mat> _camera_extrinsics;
+    
     // Map of poses of all vertices (cameras and frames).
     unordered_map<string, Mat> _vertex_pose_map;
     
     // Toggle ceres progress to console.
     const bool _ceres_details_enabled;
+    
+    // Whether camera system has been calibrated.
+    bool _calibrated = false;
 };
 
 #endif // CAMERA_SYSTEM_CALIBRATION_H

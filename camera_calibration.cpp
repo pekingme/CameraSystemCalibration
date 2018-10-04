@@ -67,7 +67,7 @@ void CameraCalibration::Calibrate()
     }
     // Removes invalid frames from _valid_frames.
     RemoveInvalidFrames();
-    
+
     // Calculates poly parameters and t3 together.
     CalculatePolyAndT3();
 
@@ -272,9 +272,6 @@ bool CameraCalibration::FinalizeTransform ( const Mat& u, const Mat& v, const Ma
     r3.copyTo ( final_transform->col ( 2 ) );
     t.copyTo ( final_transform->col ( 3 ) );
 
-//     cout << "finalized:" << endl;
-//     cout << *final_transform << endl;
-
     return true;
 }
 
@@ -352,22 +349,34 @@ void CameraCalibration::CalculateInversePolyFromPoly()
     _camera.SetInversePolyParameters ( inverse_poly_parameters );
 }
 
-int CameraCalibration::RejectFrames ( const double average_bound, const double deviation_bound )
+int CameraCalibration::RejectFrames ( const double average_bound, const double deviation_bound, const bool remove_invalid )
 {
     int rejection_count = 0;
     for ( unsigned i=0; i<_valid_frames.size(); i++ )
     {
-        Frame* f = &_valid_frames[i];
-        if ( f->valid && f->reprojection_error > average_bound )
+        Frame* frame = &_valid_frames[i];
+        if ( frame->valid && frame->reprojection_error > average_bound )
         {
-            f->valid = false;
+            frame->valid = false;
             rejection_count ++;
         }
     }
-    // Removes rejected frames.
-    RemoveInvalidFrames();
-    
+    if ( remove_invalid )
+    {
+        // Removes rejected frames.
+        RemoveInvalidFrames();
+    }
+
     return rejection_count;
+}
+
+void CameraCalibration::RevalidateFrames()
+{
+    for ( unsigned i=0; i<_valid_frames.size(); i++ )
+    {
+        Frame* frame = &_valid_frames[i];
+        frame->valid = true;
+    }
 }
 
 void CameraCalibration::OptimizeFully()
@@ -516,17 +525,19 @@ double CameraCalibration::Reproject()
 
 void CameraCalibration::RemoveInvalidFrames()
 {
-  vector<Frame> effective_valid_frames;
-  unordered_map<unsigned, unsigned> effective_global_to_local_map;
-  for(unsigned i=0;i<_valid_frames.size();i++){
-    Frame* frame = &_valid_frames[i];
-    if(frame->valid){
-      effective_global_to_local_map[frame->global_index] = effective_valid_frames.size();
-      effective_valid_frames.push_back(*frame);
+    vector<Frame> effective_valid_frames;
+    unordered_map<unsigned, unsigned> effective_global_to_local_map;
+    for ( unsigned i=0; i<_valid_frames.size(); i++ )
+    {
+        Frame* frame = &_valid_frames[i];
+        if ( frame->valid )
+        {
+            effective_global_to_local_map[frame->global_index] = effective_valid_frames.size();
+            effective_valid_frames.push_back ( *frame );
+        }
     }
-  }
-  _global_to_local_map.swap(effective_global_to_local_map);
-  _valid_frames.swap(effective_valid_frames);
+    _global_to_local_map.swap ( effective_global_to_local_map );
+    _valid_frames.swap ( effective_valid_frames );
 }
 
 void CameraCalibration::SaveAllValidFrames ( const string& folder, bool draw_detected, bool draw_reprojected )

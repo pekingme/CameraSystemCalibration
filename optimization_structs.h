@@ -259,5 +259,45 @@ private:
     const double* _intrinsics;
 };
 
+struct ErrorToOptimizeSystemFully{
+public:
+    ErrorToOptimizeSystemFully ( const Vec2d detected_corner, const Vec3d board_corner )
+        :_detected_corner ( detected_corner ), _board_corner ( board_corner ) {}
+
+    bool operator() ( const double* intrinsics, const double* camera_rotation_vector_data, const double* camera_translation_vector_data,
+                      const double* frame_rotation_vector_data, const double* frame_translation_vector_data, double* residuals ) const {
+        Mat camera_rotation_vector ( 3, 1, CV_64FC1, ( void* ) camera_rotation_vector_data );
+        Mat camera_translation_vector ( 3, 1, CV_64FC1, ( void* ) camera_translation_vector_data );
+        Mat frame_rotation_vector ( 3, 1, CV_64FC1, ( void* ) frame_rotation_vector_data );
+        Mat frame_translation_vector ( 3, 1, CV_64FC1, ( void* ) frame_translation_vector_data );
+        Mat camera_transform = Mat::eye ( 3, 4, CV_64FC1 );
+        Mat frame_transform = Mat::eye ( 3, 4, CV_64FC1 );
+        Utils::GetTransformFromRAndTVectors ( camera_rotation_vector, camera_translation_vector, &camera_transform );
+        Utils::GetTransformFromRAndTVectors ( frame_rotation_vector, frame_translation_vector, &frame_transform );
+        camera_transform = Utils::GetTransform44From34 ( camera_transform );
+        frame_transform = Utils::GetTransform44From34 ( frame_transform );
+        Mat local_rotation_vector, local_translation_vector, local_transform = camera_transform * frame_transform;
+        Utils::GetRAndTVectorsFromTransform ( local_transform.rowRange ( 0, 3 ), &local_rotation_vector, &local_translation_vector );
+
+        Vec2d reprojected_corner;
+        Utils::ReprojectSingleCorner ( intrinsics, ( double* ) local_rotation_vector.data, ( double* ) local_translation_vector.data,
+                                       _board_corner, &reprojected_corner );
+        Vec2d reprojection_error = reprojected_corner - _detected_corner;
+        residuals[0] = reprojection_error[0];
+        residuals[1] = reprojection_error[1];
+        return true;
+    }
+
+    static ceres::CostFunction* Create ( const Vec2d& detected_corner, const Vec3d& board_corner ) {
+        return ( new ceres::NumericDiffCostFunction<ErrorToOptimizeSystemFully, ceres::CENTRAL, 2, TOTAL_SIZE, 3, 3, 3, 3> (
+                     new ErrorToOptimizeSystemFully ( detected_corner, board_corner )
+                 ) );
+    }
+
+private:
+    const Vec2d _detected_corner;
+    const Vec3d _board_corner;
+};
+
 #endif // OPTIMIZATIONSTRUCTS_H
 

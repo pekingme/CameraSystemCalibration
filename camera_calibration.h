@@ -28,7 +28,10 @@ public:
     void Calibrate();
 
     // Rejects frames with very big error.
-    int RejectFrames ( const double average_bound, const double deviation_bound );
+    int RejectFrames ( const double average_bound, const double deviation_bound, const bool remove_invalid );
+
+    // Revalidate all frames.
+    void RevalidateFrames();
 
     // Optimizes intrinsic and extrinsic parameters.
     void OptimizeFully();
@@ -84,12 +87,16 @@ private:
 
     // Calibration settings.
     const CameraSystemCalibrationOptions _options;
+    
     // Camera model.
     Camera _camera;
+    
     // Toggle ceres progress to console.
     const bool _ceres_details_enabled;
+    
     // Map from frame global index to local index in _valid_frames.
     unordered_map<unsigned, unsigned> _global_to_local_map;
+    
     // Vector of valid frames.
     vector<Frame> _valid_frames;
 };
