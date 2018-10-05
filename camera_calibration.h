@@ -19,7 +19,7 @@ class CameraCalibration
 {
 public:
     CameraCalibration ( const string& camera_name, const CameraSystemCalibrationOptions& options, bool ceres_details_enabled )
-        : _options ( options ), _camera ( camera_name ), _ceres_details_enabled ( ceres_details_enabled ) {};
+        : _options ( options ), _camera ( camera_name ), _ceres_details_enabled ( ceres_details_enabled ) {}
 
     // Extracts corners from frame and save if it's valid.
     bool ExtractCornersAndSave ( Frame* frame );
@@ -87,16 +87,16 @@ private:
 
     // Calibration settings.
     const CameraSystemCalibrationOptions _options;
-    
+
     // Camera model.
     Camera _camera;
-    
+
     // Toggle ceres progress to console.
     const bool _ceres_details_enabled;
-    
+
     // Map from frame global index to local index in _valid_frames.
     unordered_map<unsigned, unsigned> _global_to_local_map;
-    
+
     // Vector of valid frames.
     vector<Frame> _valid_frames;
 };

@@ -492,7 +492,7 @@ void CameraSystemCalibration::ReadArucoParameters ( const string& aruco_file_nam
 void CameraSystemCalibration::SaveResults()
 {
     FileStorage file_storage ( _output_file_name, FileStorage::WRITE );
-    file_storage << "cameras" << "[";
+    file_storage << "Cameras" << "[";
     for ( unsigned i=0; i<_camera_calibrations.size(); i++ )
     {
         Camera* camera = _camera_calibrations[i].GetCameraPtr();
@@ -502,31 +502,31 @@ void CameraSystemCalibration::SaveResults()
         Utils::GetRAndTVectorsFromTransform ( _camera_extrinsics[i].rowRange(0, 3), &rotation_vector, &translation_vector );
 
         file_storage << "{";
+	file_storage << "Name" << camera->GetName();
         // Writes affine parameters.
-        file_storage << "c" << intrinsics[0] << "d" << intrinsics[1] << "e" << intrinsics[2];
-        file_storage << "u0" << intrinsics[3] << "v0" << intrinsics[4];
+        file_storage << "C" << intrinsics[0] << "D" << intrinsics[1] << "E" << intrinsics[2];
+        file_storage << "U0" << intrinsics[3] << "V0" << intrinsics[4];
         // Writes poly parameters.
-        file_storage << "poly" << "[:";
+        file_storage << "Poly" << "[:";
         for ( unsigned j=0; j<POLY_SIZE; j++ )
         {
             file_storage << intrinsics[POLY_START+j];
         }
         file_storage << "]";
         // Writes inverse poly parameters.
-        file_storage << "inverse_poly" << "[:";
+        file_storage << "InversePoly" << "[:";
         for ( unsigned j=0; j<INV_POLY_SIZE; j++ )
         {
             file_storage << intrinsics[INV_POLY_START+j];
         }
         file_storage << "]";
         // Writes extrinsic parameters.
-        file_storage << "rvec" << "[:";
+	file_storage.writeComment("Extrinsic parameters: [0-2] rotation vector, [3-5] translation vector.", true);
+        file_storage << "Extrinsic" << "[:";
         for ( unsigned j=0; j<3; j++ )
         {
             file_storage << rotation_vector.at<double> ( j, 0 );
         }
-        file_storage << "]";
-        file_storage << "tvec" << "[:";
         for ( unsigned j=0; j<3; j++ )
         {
             file_storage << translation_vector.at<double> ( j, 0 );
