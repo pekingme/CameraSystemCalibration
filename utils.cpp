@@ -29,7 +29,7 @@ void Utils::ShowFrameInWindow ( const string& window_name, const Frame& frame, c
     imshow ( window_name, canvas_mat );
 }
 
-void Utils::SaveFrame ( const string& folder, const Frame& frame, const bool draw_detected, const bool draw_reprojected )
+void Utils::SaveFrame ( const string& folder, const Frame& frame, const bool draw_detected, const bool draw_reprojected, const bool save_original )
 {
     Mat canvas_mat;
     frame.original_frame.copyTo ( canvas_mat );
@@ -44,6 +44,10 @@ void Utils::SaveFrame ( const string& folder, const Frame& frame, const bool dra
     rectangle ( canvas_mat, Point ( 0, 0 ), Point ( canvas_mat.cols, 40 ), Scalar ( 255, 255, 255 ), CV_FILLED );
     putText ( canvas_mat, "Average reprojection error = "+to_string ( frame.reprojection_error ), Point ( 5, 35 ),  CV_FONT_HERSHEY_SIMPLEX, 1, Scalar ( 255, 0, 0 ), 2 );
     imwrite ( folder + frame.camera_name + "-" + to_string ( frame.global_index ) + ".jpg", canvas_mat );
+    if ( save_original )
+    {
+        imwrite ( folder+"original/"+frame.camera_name+"-"+to_string ( frame.global_index ) +".jpg", frame.original_frame );
+    }
 }
 
 Mat Utils::GetCharucoBoardCornersMatFromVector ( const Mat& corner_ids, const vector< Point3f >& point_vector )
@@ -51,11 +55,18 @@ Mat Utils::GetCharucoBoardCornersMatFromVector ( const Mat& corner_ids, const ve
     Mat charuco_board_corners ( corner_ids.total(), 1, CV_32FC3 );
     for ( size_t p=0; p<corner_ids.total(); p++ )
     {
-        charuco_board_corners.at<Vec3f> ( p,0 ) [0] = point_vector[corner_ids.at<int> ( p,0 )].x;
-        charuco_board_corners.at<Vec3f> ( p,0 ) [1] = point_vector[corner_ids.at<int> ( p,0 )].y;
-        charuco_board_corners.at<Vec3f> ( p,0 ) [2] = point_vector[corner_ids.at<int> ( p,0 )].z;
+        int corner_id = corner_ids.at<int> ( p, 0 );
+        Point3f board_corner = point_vector[corner_id];
+        charuco_board_corners.at<Vec3f> ( p,0 ) [0] = board_corner.x;
+        charuco_board_corners.at<Vec3f> ( p,0 ) [1] = -board_corner.y;
+        charuco_board_corners.at<Vec3f> ( p,0 ) [2] = 0;
     }
     return charuco_board_corners;
+}
+
+Mat Utils::SwapPointsXandY ( const Mat& points )
+{
+
 }
 
 int Utils::Sign ( const double value )
@@ -77,11 +88,9 @@ int Utils::Sign ( const double value )
 double Utils::EvaluatePolyEquation ( const double* coefficients, const int n, const double x )
 {
     double y = 0.0;
-    double x_i = 1.0;
-    for ( int power=0; power<n; power++ )
+    for ( int power=n-1; power>=0; --power )
     {
-        y += coefficients[power] * x_i;
-        x_i *= x;
+        y = y * x + coefficients[power];
     }
     return y;
 }
@@ -89,8 +98,8 @@ double Utils::EvaluatePolyEquation ( const double* coefficients, const int n, co
 void Utils::GetRAndTVectorsFromTransform ( const Mat& transform, Mat* r_mat, Mat* t_mat )
 {
     CV_Assert ( transform.rows == 3 && transform.cols == 4 );
-    r_mat->create(3, 1, CV_64FC1);
-    t_mat->create(3, 1, CV_64FC1);
+    r_mat->create ( 3, 1, CV_64FC1 );
+    t_mat->create ( 3, 1, CV_64FC1 );
     Rodrigues ( transform.colRange ( 0, 3 ), *r_mat );
     transform.col ( 3 ).copyTo ( *t_mat );
 }
@@ -102,12 +111,49 @@ void Utils::GetTransformFromRAndTVectors ( const Mat& r_mat, const Mat& t_mat, M
     t_mat.copyTo ( transform->col ( 3 ) );
 }
 
+void Utils::GetCAndTVectorsFromTransform ( const Mat& transform, Mat* c_mat, Mat* t_mat )
+{
+    CV_Assert ( transform.rows == 3 && transform.cols == 4 );
+    c_mat->create ( 3, 1, CV_64FC1 );
+    t_mat->create ( 3, 1, CV_64FC1 );
+    Mat R = transform.colRange ( 0, 3 );
+    GetCVectorFromRotation ( R, c_mat );
+    transform.col ( 3 ).copyTo ( *t_mat );
+}
+
+void Utils::GetCVectorFromRotation ( const Mat& rotation, Mat* c_mat )
+{
+    CV_Assert ( rotation.rows == 3 && rotation.cols == 3 );
+    Mat eye = Mat::eye ( 3, 3, rotation.type() );
+    Mat c1 = rotation - eye;
+    Mat c2 = rotation + eye;
+    Mat c = c1 * c2.inv();
+
+    c_mat->at<double> ( 0, 0 ) = -c.at<double> ( 1, 2 );
+    c_mat->at<double> ( 1, 0 ) = c.at<double> ( 0, 2 );
+    c_mat->at<double> ( 2, 0 ) = -c.at<double> ( 0, 1 );
+}
+
 Mat Utils::GetTransform44From34 ( const Mat& transform_3_4 )
 {
     CV_Assert ( transform_3_4.rows == 3 && transform_3_4.cols == 4 );
     Mat transform_4_4 = Mat::eye ( 4, 4, transform_3_4.type() );
     transform_3_4.copyTo ( transform_4_4.rowRange ( 0, 3 ) );
     return transform_4_4;
+}
+
+Mat Utils::InvertTransform ( const Mat& transform_3_4 )
+{
+    CV_Assert(transform_3_4.rows == 3 && transform_3_4.cols == 4);
+    Mat rotation = transform_3_4.colRange(0, 3);
+    Mat inverted_rotation = rotation.t();
+    Mat translation = transform_3_4.col(3);
+    Mat inverted_translation = -inverted_rotation * translation;
+    Mat inverted_transform = Mat::eye(3, 4, transform_3_4.type());
+    inverted_rotation.copyTo(inverted_transform.colRange(0, 3));
+    inverted_translation.copyTo(inverted_transform.col(3));
+    
+    return inverted_transform;
 }
 
 void Utils::ReprojectCornersInFrame ( const double* intrinsics, const double* rotation_vector_data,
@@ -124,6 +170,7 @@ void Utils::ReprojectCornersInFrame ( const double* intrinsics, const double* ro
     Rodrigues ( rotation_vector, rotation_matrix );
     Mat flatten_board_corners_in_camera = flatten_board_corners * rotation_matrix.t()
                                           + Mat::ones ( flatten_board_corners.rows, 1, CV_64F ) * Mat ( translation_vector ).t();
+    cout << flatten_board_corners_in_camera << endl;
     double affine_c = intrinsics[0];
     double affine_d = intrinsics[1];
     double affine_e = intrinsics[2];
@@ -139,7 +186,7 @@ void Utils::ReprojectCornersInFrame ( const double* intrinsics, const double* ro
         double corner_y = flatten_board_corners_in_camera.at<double> ( i, 1 );
         double corner_z = flatten_board_corners_in_camera.at<double> ( i, 2 );
         // Calculates norm on xy plane.
-        double norm_on_xy = sqrt ( corner_x * corner_x + corner_y * corner_y );
+	double norm_on_xy = hypot( corner_x, corner_y);
         if ( norm_on_xy == 0.0 )
         {
             norm_on_xy = 1e-14;
@@ -174,7 +221,7 @@ void Utils::ReprojectSingleCorner ( const double* intrinsics, const double* rota
     copy ( intrinsics+INV_POLY_START, intrinsics+INV_POLY_START+INV_POLY_SIZE, inverse_poly );
 
     // Calculates norm on xy plane.
-    double norm_on_xy = sqrt ( board_corner_in_camera[0] * board_corner_in_camera[0] + board_corner_in_camera[1] * board_corner_in_camera[1] );
+    double norm_on_xy = hypot (board_corner_in_camera[0], board_corner_in_camera[1]);
     if ( norm_on_xy == 0.0 )
     {
         norm_on_xy = 1e-14;

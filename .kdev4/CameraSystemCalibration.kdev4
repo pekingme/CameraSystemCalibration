@@ -20,16 +20,16 @@ Path=gcc
 Type=GCC
 
 [Launch]
-Launch Configurations=Launch Configuration 0
+Launch Configurations=Launch Configuration 0,Launch Configuration 1
 
 [Launch][Launch Configuration 0]
 Configured Launch Modes=execute
 Configured Launchers=nativeAppLauncher
-Name=New Compiled Binary Launcher
+Name=Use Mono
 Type=Native Application
 
 [Launch][Launch Configuration 0][Data]
-Arguments=../example_data/calibration_result.yaml ../example_data/calibration_setting.yaml ../example_data/detector_setting.yaml
+Arguments=../example_data/Results/ ../example_data/calibration_setting.yaml ../example_data/detector_setting.yaml -mono=../example_data/mono_calibration.yaml
 Dependencies=@Variant(\x00\x00\x00\t\x00\x00\x00\x00\x00)
 Dependency Action=Nothing
 EnvironmentGroup=
@@ -39,6 +39,24 @@ Project Target=CameraSystemCalibration,calibrate_example
 Use External Terminal=false
 Working Directory=
 isExecutable=true
+
+[Launch][Launch Configuration 1]
+Configured Launch Modes=execute
+Configured Launchers=nativeAppLauncher
+Name=No Use Mono
+Type=Native Application
+
+[Launch][Launch Configuration 1][Data]
+Arguments=../example_data/Results/ ../example_data/calibration_setting.yaml ../example_data/detector_setting.yaml
+Dependencies=@Variant(\x00\x00\x00\t\x00\x00\x00\x00\x01\x00\x00\x00\x0b\x00\x00\x00\x00\x02\x00\x00\x00.\x00C\x00a\x00m\x00e\x00r\x00a\x00S\x00y\x00s\x00t\x00e\x00m\x00C\x00a\x00l\x00i\x00b\x00r\x00a\x00t\x00i\x00o\x00n\x00\x00\x00"\x00c\x00a\x00l\x00i\x00b\x00r\x00a\x00t\x00e\x00_\x00e\x00x\x00a\x00m\x00p\x00l\x00e)
+Dependency Action=Build
+EnvironmentGroup=
+Executable=file:///home/haodong/kdevelop_projects/CameraSystemCalibration/
+External Terminal=konsole --noclose --workdir %workdir -e %exe
+Project Target=CameraSystemCalibration,calibrate_example
+Use External Terminal=false
+Working Directory=
+isExecutable=false
 
 [Project]
 VersionControlSupport=kdevgit

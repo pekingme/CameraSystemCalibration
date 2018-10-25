@@ -21,10 +21,13 @@ public:
     static void ShowFrameInWindow ( const string& window_name, const Frame& frame, const bool draw_detected, const bool draw_reprojected );
 
     // Saves a frame to file system with/without detected corners and/or reprojected corners.
-    static void SaveFrame ( const string& folder, const Frame& frame, const bool draw_detected, const bool draw_reprojected );
+    static void SaveFrame ( const string& folder, const Frame& frame, const bool draw_detected, const bool draw_reprojected, const bool save_original );
 
     // Collects points from vector based on ids to a N x 1 x c(3) Mat.
     static Mat GetCharucoBoardCornersMatFromVector ( const Mat& corner_ids, const vector<Point3f>& point_vector );
+    
+    // Swap x and y coordinate for applying coordinates system used in paper.
+    static Mat SwapPointsXandY (const Mat& points);
 
     // Return +1 if positive, -1 if negative, 0 otherwise.
     static int Sign ( const double value );
@@ -38,8 +41,17 @@ public:
     // Forms up 3 x 4 transform matrix from rotation vector and translation vector.
     static void GetTransformFromRAndTVectors ( const Mat& r_mat, const Mat& t_mat, Mat* transform );
     
+    // Gets Cayley vector and translation vector from 3 x 4 transform matrix.
+    static void GetCAndTVectorsFromTransform ( const Mat& transform, Mat* c_mat, Mat* t_mat );
+    
+    // Gets Cayley vector vector from 3 x 3 rotation matrix.
+    static void GetCVectorFromRotation ( const Mat& rotation, Mat* c_mat );
+    
     // Get transfrom matrix 4 x 4 from transfrom 3 x 4.
     static Mat GetTransform44From34(const Mat& transform);
+    
+    // Invert transform matrix 3 x 4.
+    static Mat InvertTransform(const Mat& transform);
 
     // Reprojects the board corners in the frame based on input intrinsic and extrinsic parameters.
     static void ReprojectCornersInFrame ( const double* intrinsics, const double* rotation_vector_data, const double* translation_vector_data,

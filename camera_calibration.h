@@ -20,11 +20,17 @@ class CameraCalibration
 public:
     CameraCalibration ( const string& camera_name, const CameraSystemCalibrationOptions& options, bool ceres_details_enabled )
         : _options ( options ), _camera ( camera_name ), _ceres_details_enabled ( ceres_details_enabled ) {}
-
+    CameraCalibration ( const string& camera_name, const CameraSystemCalibrationOptions& options, const Camera& camera, bool ceres_details_enabled )
+        : _options ( options ), _camera ( camera ), _ceres_details_enabled ( ceres_details_enabled ) {}
+        
     // Extracts corners from frame and save if it's valid.
     bool ExtractCornersAndSave ( Frame* frame );
 
-    // Performs initial calibration.
+    // Overrides the intrinsic parameters with input values.
+    // Calculates transform for each frame with loaded intrinsic parameters.
+    void OverrideIntrinsicsAndUpdateExtrinsics(const Camera& new_camera);
+    
+    // Performs mono calibration.
     void Calibrate();
 
     // Rejects frames with very big error.
@@ -35,12 +41,15 @@ public:
 
     // Optimizes intrinsic and extrinsic parameters.
     void OptimizeFully();
+    
+    // Optimizes extrinsic parameters.
+    void OptimizeExtrinsic();
 
     // Calculates and return reprojection error per corner of current calibration result.
     double Reproject();
 
     // Saves all valid frames with/without detected corners and/or reprojected corners.
-    void SaveAllValidFrames ( const string& folder, bool draw_detected, bool draw_reprojected );
+    void SaveAllValidFrames ( const string& folder, const bool draw_detected, const bool draw_reprojected, const bool save_original );
 
     // Returns the name of current camera model.
     string GetCameraName() {
@@ -81,6 +90,10 @@ private:
 
     // Calculates poly parameters from inverse poly parameters.
     void CalculatePolyFromInversePoly();
+    
+    // Calculates extrinsic parameters with provided intrinsics.
+    // See eq. 10.1, 10.2, 10.3 in Scaramuzza's paper.
+    void CalculateExtrinsicWithIntrinsic(Frame* frame);
 
     // Removes all frame objects which are no longer valid.
     void RemoveInvalidFrames();

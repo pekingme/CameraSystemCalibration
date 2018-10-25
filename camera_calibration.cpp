@@ -32,13 +32,35 @@ bool CameraCalibration::ExtractCornersAndSave ( Frame* frame )
     frame->detected_corners_32 = charuco_detected_corners;
     flatten_charuco_board_corners.convertTo ( frame->flatten_board_corners_64, CV_64F );
     flatten_charuco_detected_corners.convertTo ( frame->flatten_detected_corners_64, CV_64F );
-    frame->transform = Mat::zeros ( 3, 4, CV_64FC1 );
+    frame->transform = Mat::eye ( 3, 4, CV_64FC1 );
     frame->valid = true;
 
     _global_to_local_map[frame->global_index] = _valid_frames.size();
     _valid_frames.push_back ( *frame );
 
     return true;
+}
+
+void CameraCalibration::OverrideIntrinsicsAndUpdateExtrinsics ( const Camera& new_camera )
+{
+    // Override intrinsic parameters in current camera model with the new camera.
+    double intrinsics[TOTAL_SIZE];
+    new_camera.GetIntrinsicParameters ( intrinsics );
+    _camera.SetIntrinsicsParameters ( intrinsics );
+
+    if ( _global_to_local_map.size() == 0 )
+    {
+        cerr << "No valid frames are found for calibration." << endl;
+        exit ( -1 );
+    }
+    // Calculates extrinsic parameters for each frame.
+    for ( unsigned i=0; i<_valid_frames.size(); i++ )
+    {
+        CalculateExtrinsicWithIntrinsic ( &_valid_frames[i] );
+    }
+
+    // Prints current calibrate parameters.
+    _camera.PrintCameraParameters ( "\t\t" );
 }
 
 void CameraCalibration::Calibrate()
@@ -51,7 +73,7 @@ void CameraCalibration::Calibrate()
     // Initializes intrinsic parameters.
     Vec2i frame_size = _camera.GetFrameSize();
     double initial_intrinsics[TOTAL_SIZE] = {1, 0, 0, frame_size[0]/2.0, frame_size[1]/2.0};
-    _camera.SetIntrinsics ( initial_intrinsics );
+    _camera.SetIntrinsicsParameters ( initial_intrinsics );
     // Initializes extrinsic parameters based on observed corners.
     for ( unsigned i=0; i<_valid_frames.size(); i++ )
     {
@@ -69,9 +91,11 @@ void CameraCalibration::Calibrate()
     RemoveInvalidFrames();
 
     // Calculates poly parameters and t3 together.
+    cout << "Calculating polynomial and T3 ..." << endl;
     CalculatePolyAndT3();
 
     // Calculates inverse poly parameters.
+    cout << "Calculating inverse polynomial ..." << endl;
     CalculateInversePolyFromPoly();
 
     // Prints current calibration parameters
@@ -143,7 +167,7 @@ void CameraCalibration::CalculateInitialTransforms ( const Frame& frame, Mat* u,
         Vec3d r2 ( r12, r22, r32s[i] );
         Vec3d t ( t1, t2, 0 );
 
-        double lambda = 1 / norm ( r1 );
+        double lambda = 1.0 / cv::norm ( r1 );
         Mat transform1 = Mat::zeros ( 3,3,CV_64F );
         Mat ( r1 ).copyTo ( transform1.col ( 0 ) );
         Mat ( r2 ).copyTo ( transform1.col ( 1 ) );
@@ -156,12 +180,79 @@ void CameraCalibration::CalculateInitialTransforms ( const Frame& frame, Mat* u,
         transform2 = transform2 * -1;
         transforms->push_back ( transform2 );
     }
+}
 
-//     cout << "initial:" << endl;
-//     for ( unsigned i=0; i<transforms->size(); i++ )
-//     {
-//         cout << ( *transforms ) [i] << endl;
-//     }
+void CameraCalibration::CalculateExtrinsicWithIntrinsic ( Frame* frame )
+{
+    Vec2d camera_center = _camera.GetCenter();
+    double poly[POLY_SIZE];
+    _camera.GetPolyParameters ( poly );
+
+    Mat u = frame->flatten_detected_corners_64.col ( 0 ) - camera_center[0];
+    Mat v = frame->flatten_detected_corners_64.col ( 1 ) - camera_center[1];
+    Mat x = frame->flatten_board_corners_64.col ( 0 );
+    Mat y = frame->flatten_board_corners_64.col ( 1 );
+    Mat f_rho ( frame->corner_count, 1, CV_64F );
+    for ( unsigned i=0; i<frame->corner_count; i++ )
+    {
+        f_rho.at<double> ( i, 0 ) = Utils::EvaluatePolyEquation ( poly, POLY_SIZE, hypot ( u.at<double> ( i, 0 ), v.at<double> ( i, 0 ) ) );
+    }
+
+    // Equation 10.1, v * (r31 * x + r32 * y + t3) - f(rho) * (r21 * x + r22 * y + t2) = 0.
+    // Equation 10.2, f(rho) * (r11 * x + r12 * y + t1) - u * (r31 * x + r32 * y + t3) = 0.
+    // Equation 10.3, u * (r21 * x + r22 * y + t2) - v * (r11 * x + r12 * y + t1) = 0.
+    // Solving in order of [r11, r21, r31, r12, r22, r32, t1, t2, t3]
+    Mat M1 ( frame->corner_count, 9, CV_64F, 0.0 );
+    M1.col ( 2 ) += v.mul ( x );
+    M1.col ( 5 ) += v.mul ( y );
+    M1.col ( 8 ) += v;
+    M1.col ( 1 ) += -f_rho.mul ( x );
+    M1.col ( 4 ) += -f_rho.mul ( y );
+    M1.col ( 7 ) += -f_rho;
+
+    Mat M2 ( frame->corner_count, 9, CV_64F, 0.0 );
+    M2.col ( 0 ) += f_rho.mul ( x );
+    M2.col ( 3 ) += f_rho.mul ( y );
+    M2.col ( 6 ) += f_rho;
+    M2.col ( 2 ) += -u.mul ( x );
+    M2.col ( 5 ) += -u.mul ( y );
+    M2.col ( 8 ) += -u;
+
+    Mat M3 ( frame->corner_count, 9, CV_64F, 0.0 );
+    M3.col ( 1 ) += u.mul ( x );
+    M3.col ( 4 ) += u.mul ( y );
+    M3.col ( 7 ) += u;
+    M3.col ( 0 ) += -v.mul ( x );
+    M3.col ( 3 ) += -v.mul ( y );
+    M3.col ( 6 ) += -v;
+
+    Mat M;
+    vector<Mat> M_vec = {M1, M2, M3};
+    vconcat ( M_vec, M );
+
+    SVD svd ( M, CV_SVD_MODIFY_A );
+    double r11 = svd.vt.at<double> ( 8, 0 );
+    double r21 = svd.vt.at<double> ( 8, 1 );
+    double r31 = svd.vt.at<double> ( 8, 2 );
+    double r12 = svd.vt.at<double> ( 8, 3 );
+    double r22 = svd.vt.at<double> ( 8, 4 );
+    double r32 = svd.vt.at<double> ( 8, 5 );
+    double t1 = svd.vt.at<double> ( 8, 6 );
+    double t2 = svd.vt.at<double> ( 8, 7 );
+    double t3 = svd.vt.at<double> ( 8, 8 );
+
+    Vec3d r1 ( r11, r21, r31 );
+    Vec3d r2 ( r12, r22, r32 );
+    double lambda = 1.0 / cv::norm ( r1 );
+    double lambda2 = 1.0 / cv::norm ( r2 );
+    r1 *= lambda;
+    r2 *= lambda;
+    Vec3d r3 = r1.cross ( r2 );
+    Vec3d t ( t1, t2, t3 );
+    Mat ( r1 ).copyTo ( frame->transform.col ( 0 ) );
+    Mat ( r2 ).copyTo ( frame->transform.col ( 1 ) );
+    Mat ( r3 ).copyTo ( frame->transform.col ( 2 ) );
+    Mat ( t ).copyTo ( frame->transform.col ( 3 ) );
 }
 
 bool CameraCalibration::RefineTransforms ( const Mat& u, const Mat& v, const Mat& x, const Mat& y, vector< Mat >* transforms )
@@ -175,7 +266,7 @@ bool CameraCalibration::RefineTransforms ( const Mat& u, const Mat& v, const Mat
     {
         Vec2d t ( ( *transforms ) [i].at<double> ( 0,2 ), ( *transforms ) [i].at<double> ( 1,2 ) );
         Vec2d p ( u.at<double> ( 0,0 ), v.at<double> ( 0,0 ) );
-        double translation = norm ( t - p );
+        double translation = cv::norm ( t - p );
         if ( translation < min_translation )
         {
             min_translation = translation;
@@ -183,7 +274,7 @@ bool CameraCalibration::RefineTransforms ( const Mat& u, const Mat& v, const Mat
         }
     }
 
-    // Keeps transforms with t vector, which has same sign as minimum translation transform.
+    // Only keeps transforms with t vector, which has same sign as minimum translation transform.
     if ( min_translation_index != -1 )
     {
         for ( unsigned i=0; i<transforms->size(); i++ )
@@ -198,12 +289,6 @@ bool CameraCalibration::RefineTransforms ( const Mat& u, const Mat& v, const Mat
             }
         }
         transforms->swap ( refined_transforms );
-
-//         cout << "refined:" << endl;
-//         for ( unsigned i=0; i<transforms->size(); i++ )
-//         {
-//             cout << ( *transforms ) [i] << endl;
-//         }
 
         return true;
     }
@@ -326,7 +411,7 @@ void CameraCalibration::CalculateInversePolyFromPoly()
     _camera.GetPolyParameters ( poly_parameters );
     double inverse_poly_parameters[INV_POLY_SIZE];
     _camera.GetInversePolyParameters ( inverse_poly_parameters );
-    int max_rho = static_cast<int> ( norm ( _camera.GetFrameSize() ) /2*1.2 );
+    int max_rho = static_cast<int> ( cv::norm ( _camera.GetFrameSize() ) /2*1.2 );
     // Forms up the ceres problem.
     ceres::Problem problem;
     for ( int rho=0; rho<max_rho; rho++ )
@@ -432,7 +517,7 @@ void CameraCalibration::OptimizeFully()
         cout << summary.FullReport() << endl;
     }
     // Updates intrinsic and extrinsic parameters.
-    _camera.SetIntrinsics ( intrinsic_parameters );
+    _camera.SetIntrinsicsParameters ( intrinsic_parameters );
     for ( unsigned i=0; i<_valid_frames.size(); i++ )
     {
         Frame* frame = &_valid_frames[i];
@@ -449,6 +534,65 @@ void CameraCalibration::OptimizeFully()
     _camera.PrintCameraParameters ( "\t\t" );
 }
 
+void CameraCalibration::OptimizeExtrinsic()
+{
+    double intrinsic_parameters[TOTAL_SIZE];
+    _camera.GetIntrinsicParameters ( intrinsic_parameters );
+    int total_frame = _valid_frames.size();
+    Mat all_rotations[total_frame], all_translations[total_frame];
+    for ( unsigned i=0; i<_valid_frames.size(); i++ )
+    {
+        // Forms up the ceres problem
+        ceres::Problem problem;
+        Frame frame = _valid_frames[i];
+        if ( !frame.valid )
+        {
+            continue;
+        }
+
+        Mat rotation_vector, translation_vector;
+        Utils::GetRAndTVectorsFromTransform ( frame.transform, &rotation_vector, &translation_vector );
+        all_rotations[i] = rotation_vector;
+        all_translations[i] = translation_vector;
+
+//         for ( unsigned r=0; r<frame.corner_count; r++ )
+//         {
+//             Vec2d detected_corner = Vec2d ( frame.flatten_detected_corners_64.row ( r ) );
+//             Vec3d board_corner = Vec3d ( frame.flatten_board_corners_64.row ( r ) );
+//             ceres::CostFunction* cost_function = ErrorToOptimizeExtrinsics::Create ( intrinsic_parameters, detected_corner, board_corner );
+//             problem.AddResidualBlock ( cost_function, NULL, ( double* ) all_rotations[i].data, ( double* ) all_translations[i].data );
+//         }
+
+        Mat detected_corners = frame.flatten_detected_corners_64;
+        Mat board_corners = frame.flatten_board_corners_64;
+        ceres::CostFunction* cost_function = ErrorToOptimizeExtrinsics2::Create ( intrinsic_parameters, detected_corners, board_corners );
+        problem.AddResidualBlock ( cost_function, NULL, ( double* ) all_rotations[i].data, ( double* ) all_translations[i].data );
+
+        // Solves ceres problem.
+        ceres::Solver::Options options;
+        options.num_threads = 4;
+        options.max_num_iterations = 1000;
+        options.linear_solver_type = ceres::DENSE_SCHUR;
+        //options.minimizer_progress_to_stdout = _ceres_details_enabled;
+        ceres::Solver::Summary summary;
+        Solve ( options, &problem, &summary );
+        if ( _ceres_details_enabled )
+        {
+            //cout << summary.FullReport() << endl;
+        }
+    }
+    // Updates extrinsic parameters.
+    for ( unsigned i=0; i<_valid_frames.size(); i++ )
+    {
+        Frame* frame = &_valid_frames[i];
+        if ( !frame->valid )
+        {
+            continue;
+        }
+        Utils::GetTransformFromRAndTVectors ( all_rotations[i], all_translations[i], &frame->transform );
+    }
+}
+
 void CameraCalibration::CalculatePolyFromInversePoly()
 {
     double poly_parameters[POLY_SIZE];
@@ -457,7 +601,7 @@ void CameraCalibration::CalculatePolyFromInversePoly()
     _camera.GetInversePolyParameters ( inverse_poly_parameters );
     double poly_factors[POLY_SIZE];
     fill ( poly_factors, poly_factors+POLY_SIZE, 1.0 );
-    int max_rho = static_cast<int> ( norm ( _camera.GetFrameSize() ) /2*1.2 );
+    int max_rho = static_cast<int> ( cv::norm ( _camera.GetFrameSize() ) /2*1.2 );
     double max_theta = atan2 ( Utils::EvaluatePolyEquation ( poly_parameters, POLY_SIZE, max_rho ), max_rho );
     // Forms up the ceres problem.
     ceres::Problem problem;
@@ -501,9 +645,13 @@ double CameraCalibration::Reproject()
         _camera.GetIntrinsicParameters ( intrinsic_parameters );
         Mat rotation_vector, translation_vector;
         Utils::GetRAndTVectorsFromTransform ( frame->transform, &rotation_vector, &translation_vector );
+	cout << frame->transform << endl;
+	cout << frame->flatten_board_corners_64 << endl;
+	cout << frame->flatten_detected_corners_64 << endl;
         Mat flatten_reprojected_corners;
         Utils::ReprojectCornersInFrame ( intrinsic_parameters, ( double* ) rotation_vector.data, ( double* ) translation_vector.data,
                                          frame->flatten_board_corners_64, &flatten_reprojected_corners );
+	cout << flatten_reprojected_corners << endl;
         // Updates reprojected corners in current frame.
         frame->flatten_reprojected_corners_64 = flatten_reprojected_corners;
         Mat reprojected_corners_32 = flatten_reprojected_corners.reshape ( 2, frame->corner_count );
@@ -513,7 +661,7 @@ double CameraCalibration::Reproject()
         double error_in_frame = 0.0;
         for ( unsigned r=0; r<frame->corner_count; r++ )
         {
-            error_in_frame += norm ( reprojection_error.row ( r ) );
+            error_in_frame += cv::norm ( reprojection_error.row ( r ) );
         }
         frame->reprojection_error = error_in_frame / frame->corner_count;
         error_sum += error_in_frame;
@@ -540,14 +688,14 @@ void CameraCalibration::RemoveInvalidFrames()
     _valid_frames.swap ( effective_valid_frames );
 }
 
-void CameraCalibration::SaveAllValidFrames ( const string& folder, bool draw_detected, bool draw_reprojected )
+void CameraCalibration::SaveAllValidFrames ( const string& folder, const bool draw_detected, const bool draw_reprojected, const bool save_original )
 {
     for ( unsigned i=0; i<_valid_frames.size(); i++ )
     {
         Frame frame = _valid_frames[i];
         if ( frame.valid )
         {
-            Utils::SaveFrame ( folder, frame, draw_detected, draw_reprojected );
+            Utils::SaveFrame ( folder, frame, draw_detected, draw_reprojected, save_original );
         }
     }
 }
