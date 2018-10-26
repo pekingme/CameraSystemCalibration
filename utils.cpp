@@ -66,7 +66,23 @@ Mat Utils::GetCharucoBoardCornersMatFromVector ( const Mat& corner_ids, const ve
 
 Mat Utils::SwapPointsXandY ( const Mat& points )
 {
-
+    Mat out = Mat::zeros ( points.rows, points.cols, points.type() );
+    for ( int i=0; i<points.cols; i++ )
+    {
+        if ( i==0 )
+        {
+            out.col ( i ) += points.col ( 1 );
+        }
+        else if ( i==1 )
+        {
+            out.col ( i ) += points.col ( 0 );
+        }
+        else
+        {
+            out.col ( i ) += points.col ( i );
+        }
+    }
+    return out;
 }
 
 int Utils::Sign ( const double value )
@@ -144,15 +160,15 @@ Mat Utils::GetTransform44From34 ( const Mat& transform_3_4 )
 
 Mat Utils::InvertTransform ( const Mat& transform_3_4 )
 {
-    CV_Assert(transform_3_4.rows == 3 && transform_3_4.cols == 4);
-    Mat rotation = transform_3_4.colRange(0, 3);
+    CV_Assert ( transform_3_4.rows == 3 && transform_3_4.cols == 4 );
+    Mat rotation = transform_3_4.colRange ( 0, 3 );
     Mat inverted_rotation = rotation.t();
-    Mat translation = transform_3_4.col(3);
+    Mat translation = transform_3_4.col ( 3 );
     Mat inverted_translation = -inverted_rotation * translation;
-    Mat inverted_transform = Mat::eye(3, 4, transform_3_4.type());
-    inverted_rotation.copyTo(inverted_transform.colRange(0, 3));
-    inverted_translation.copyTo(inverted_transform.col(3));
-    
+    Mat inverted_transform = Mat::eye ( 3, 4, transform_3_4.type() );
+    inverted_rotation.copyTo ( inverted_transform.colRange ( 0, 3 ) );
+    inverted_translation.copyTo ( inverted_transform.col ( 3 ) );
+
     return inverted_transform;
 }
 
@@ -170,7 +186,6 @@ void Utils::ReprojectCornersInFrame ( const double* intrinsics, const double* ro
     Rodrigues ( rotation_vector, rotation_matrix );
     Mat flatten_board_corners_in_camera = flatten_board_corners * rotation_matrix.t()
                                           + Mat::ones ( flatten_board_corners.rows, 1, CV_64F ) * Mat ( translation_vector ).t();
-    cout << flatten_board_corners_in_camera << endl;
     double affine_c = intrinsics[0];
     double affine_d = intrinsics[1];
     double affine_e = intrinsics[2];
@@ -178,6 +193,8 @@ void Utils::ReprojectCornersInFrame ( const double* intrinsics, const double* ro
     double v0 = intrinsics[4];
     double inverse_poly[INV_POLY_SIZE];
     copy ( intrinsics+INV_POLY_START, intrinsics+INV_POLY_START+INV_POLY_SIZE, inverse_poly );
+    double poly[POLY_SIZE];
+    copy(intrinsics+POLY_START, intrinsics+POLY_START+POLY_SIZE, poly);
 
     for ( int i=0; i<flatten_board_corners.rows; i++ )
     {
@@ -185,8 +202,9 @@ void Utils::ReprojectCornersInFrame ( const double* intrinsics, const double* ro
         double corner_x = flatten_board_corners_in_camera.at<double> ( i, 0 );
         double corner_y = flatten_board_corners_in_camera.at<double> ( i, 1 );
         double corner_z = flatten_board_corners_in_camera.at<double> ( i, 2 );
+	
         // Calculates norm on xy plane.
-	double norm_on_xy = hypot( corner_x, corner_y);
+        double norm_on_xy = hypot ( corner_x, corner_y );
         if ( norm_on_xy == 0.0 )
         {
             norm_on_xy = 1e-14;
@@ -197,6 +215,10 @@ void Utils::ReprojectCornersInFrame ( const double* intrinsics, const double* ro
         // u, v of corner on frame without affine.
         double corner_u = corner_x * rho / norm_on_xy;
         double corner_v = corner_y * rho / norm_on_xy;
+	
+// 	double corner_u, corner_v;
+// 	CameraToSensor(poly, corner_x, corner_y, corner_z, &corner_u, &corner_v);
+	
         // Affines corner on frame.
         reprojected_corners->at<double> ( i, 0 ) = affine_c * corner_u + affine_d * corner_v + u0;
         reprojected_corners->at<double> ( i, 1 ) = affine_e * corner_u + corner_v + v0;
@@ -217,11 +239,13 @@ void Utils::ReprojectSingleCorner ( const double* intrinsics, const double* rota
     double affine_e = intrinsics[2];
     double u0 = intrinsics[3];
     double v0 = intrinsics[4];
+    double poly[POLY_SIZE];
+    copy(intrinsics+POLY_START, intrinsics+POLY_START+POLY_SIZE, poly);
     double inverse_poly[INV_POLY_SIZE];
     copy ( intrinsics+INV_POLY_START, intrinsics+INV_POLY_START+INV_POLY_SIZE, inverse_poly );
 
     // Calculates norm on xy plane.
-    double norm_on_xy = hypot (board_corner_in_camera[0], board_corner_in_camera[1]);
+    double norm_on_xy = hypot ( board_corner_in_camera[0], board_corner_in_camera[1] );
     if ( norm_on_xy == 0.0 )
     {
         norm_on_xy = 1e-14;
@@ -232,8 +256,53 @@ void Utils::ReprojectSingleCorner ( const double* intrinsics, const double* rota
     // u, v of corner on frame without affine.
     double corner_u = board_corner_in_camera[0] * rho / norm_on_xy;
     double corner_v = board_corner_in_camera[1] * rho / norm_on_xy;
+    
+//     double corner_x = board_corner_in_camera[0];
+//     double corner_y = board_corner_in_camera[1];
+//     double corner_z = board_corner_in_camera[2];    
+//     double corner_u, corner_v;
+//     
+//     CameraToSensor(poly, corner_x, corner_y, corner_z, &corner_u, &corner_v);
+    
     // Affines corner on frame.
     ( *reprojected_corner ) [0] = affine_c * corner_u + affine_d * corner_v + u0;
     ( *reprojected_corner ) [1] = affine_e * corner_u + corner_v + v0;
 }
 
+void Utils::CameraToSensor ( const double* poly, double x, double y, const double z, double* u, double* v )
+{
+    if ( x == 0 && y == 0 )
+    {
+        x = std::numeric_limits<double>::epsilon();
+        y = std::numeric_limits<double>::epsilon();
+    }
+    double xy_norm = hypot(x, y);
+    double tan = z / xy_norm;
+    double poly_copy[POLY_SIZE];
+    copy ( poly, poly+POLY_SIZE, poly_copy );
+    poly_copy[0] -= tan;
+    Mat roots, poly_mat (POLY_SIZE, 1, CV_64F, poly_copy);
+    solvePoly(poly_mat, roots);
+    
+//     cout << poly_mat << endl;
+//     cout << roots << endl;
+    
+    double rho = -1;
+    for(int i=0;i<roots.rows;i++){
+      double real = roots.at<double>(i, 0);
+      double imag = roots.at<double>(i, 1);
+      if(real <= 0 || abs(imag) > 1e-9) continue;
+      if(rho == -1){
+	rho = real;
+      }else{
+	rho = min(rho, real);
+      }
+    }
+    if(rho == -1){
+      cerr << "Cannot find root for " << x << ", " << y << ", " << z << endl;
+      cerr << poly_mat << endl;
+      exit(-1);
+    }
+    *u = x / xy_norm * rho;
+    *v = y / xy_norm * rho;
+}

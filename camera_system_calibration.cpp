@@ -179,7 +179,7 @@ void CameraSystemCalibration::Calibrate()
         // Make C0 the camera system center, i,e. pt_c1 = C1 * C0.inv * pt_c0
         Mat repositioned_camera_i_transform = _vertex_pose_map[camera_i_tag] * _vertex_pose_map[camera_0_tag].inv();
         repositioned_camera_i_transform.copyTo ( _camera_extrinsics[i] );
-        cout << endl << "Camera: " << _camera_calibrations[i].GetCameraName() << endl << _camera_extrinsics[i] << endl;
+        cout << endl << "Camera: " << _camera_calibrations[i].GetCameraName() << endl << _camera_extrinsics[i].inv() << endl;
     }
 }
 
@@ -208,16 +208,18 @@ void CameraSystemCalibration::CalibrateMonoCameras()
         {
             if ( _mono_calibration_used )
             {
+                cout << endl << "\t\tOptimizing extrinsic parameters ..." << endl;
                 camera_calibration->OptimizeExtrinsic();
             }
             else
             {
+                cout << endl << "\t\tOptimizing intrinsic and extrinsic parameters ..." << endl;
                 camera_calibration->OptimizeFully();
             }
             reprojection_error = camera_calibration->Reproject();
             cout << endl << "\t\tAverage reprojection error after non-linear optimization is " << reprojection_error << endl;
         }
-        while ( false && camera_calibration->RejectFrames ( 10, 1000, true ) > 0 );
+        while ( camera_calibration->RejectFrames ( 10, 1000, true ) > 0 );
 
         if ( reprojection_error > 1.0 )
         {

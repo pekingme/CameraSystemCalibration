@@ -11,15 +11,19 @@ void Camera::PrintCameraParameters ( const string& prefix )
     cout << prefix << "\t\td = " << _intrinsics[1] << endl;
     cout << prefix << "\t\te = " << _intrinsics[2] << endl;
     cout << prefix << "\tPoly parameters:" << endl;
+    cout << prefix << "\t\t[ ";
     for ( int i=0; i<POLY_SIZE; i++ )
     {
-        cout << prefix << "\t\tp[" << i << "] = " << _intrinsics[5+i] << endl;
+        cout << _intrinsics[5+i] << " ";
     }
+    cout << "]" << endl;
     cout << prefix << "\tInverse poly parameters:" << endl;
+    cout << prefix << "\t\t[ ";
     for ( int i=0; i<INV_POLY_SIZE; i++ )
     {
-        cout << prefix << "\t\tinv_p[" << i << "] = " << _intrinsics[10+i] << endl;
+        cout << _intrinsics[10+i] << " ";
     }
+    cout << "]" << endl;
 }
 
 void Camera::CopyIntrinsicsFrom ( const Camera& cam )

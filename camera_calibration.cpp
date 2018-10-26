@@ -16,6 +16,7 @@ bool CameraCalibration::ExtractCornersAndSave ( Frame* frame )
     Mat charuco_detected_corners, charuco_corners_ids;
     aruco::interpolateCornersCharuco ( marker_detected_corners, marker_ids, frame->original_frame, board, charuco_detected_corners, charuco_corners_ids );
     Mat flatten_charuco_detected_corners = charuco_detected_corners.reshape ( 1 ); // Flatten N x 1 x 32FC2 to N x 2 x 32FC1.
+    flatten_charuco_detected_corners = Utils::SwapPointsXandY ( flatten_charuco_detected_corners );
     if ( charuco_corners_ids.total() < 12 )
     {
         return false;
@@ -24,6 +25,7 @@ bool CameraCalibration::ExtractCornersAndSave ( Frame* frame )
     // Collects board charuco corners.
     Mat charuco_board_corners = Utils::GetCharucoBoardCornersMatFromVector ( charuco_corners_ids, board->chessboardCorners );
     Mat flatten_charuco_board_corners = charuco_board_corners.reshape ( 1 ); // Flatten N x 1 x 32FC3 to N x 3 x 32FC1.
+    flatten_charuco_board_corners = Utils::SwapPointsXandY ( flatten_charuco_board_corners );
 
     // Updates corner information in Frame.
     frame->corner_count = charuco_corners_ids.total();
@@ -72,7 +74,8 @@ void CameraCalibration::Calibrate()
     }
     // Initializes intrinsic parameters.
     Vec2i frame_size = _camera.GetFrameSize();
-    double initial_intrinsics[TOTAL_SIZE] = {1, 0, 0, frame_size[0]/2.0, frame_size[1]/2.0};
+    // Camera center coorndiates are flipped.
+    double initial_intrinsics[TOTAL_SIZE] = {1, 0, 0, frame_size[1]/2.0, frame_size[0]/2.0};
     _camera.SetIntrinsicsParameters ( initial_intrinsics );
     // Initializes extrinsic parameters based on observed corners.
     for ( unsigned i=0; i<_valid_frames.size(); i++ )
@@ -182,79 +185,6 @@ void CameraCalibration::CalculateInitialTransforms ( const Frame& frame, Mat* u,
     }
 }
 
-void CameraCalibration::CalculateExtrinsicWithIntrinsic ( Frame* frame )
-{
-    Vec2d camera_center = _camera.GetCenter();
-    double poly[POLY_SIZE];
-    _camera.GetPolyParameters ( poly );
-
-    Mat u = frame->flatten_detected_corners_64.col ( 0 ) - camera_center[0];
-    Mat v = frame->flatten_detected_corners_64.col ( 1 ) - camera_center[1];
-    Mat x = frame->flatten_board_corners_64.col ( 0 );
-    Mat y = frame->flatten_board_corners_64.col ( 1 );
-    Mat f_rho ( frame->corner_count, 1, CV_64F );
-    for ( unsigned i=0; i<frame->corner_count; i++ )
-    {
-        f_rho.at<double> ( i, 0 ) = Utils::EvaluatePolyEquation ( poly, POLY_SIZE, hypot ( u.at<double> ( i, 0 ), v.at<double> ( i, 0 ) ) );
-    }
-
-    // Equation 10.1, v * (r31 * x + r32 * y + t3) - f(rho) * (r21 * x + r22 * y + t2) = 0.
-    // Equation 10.2, f(rho) * (r11 * x + r12 * y + t1) - u * (r31 * x + r32 * y + t3) = 0.
-    // Equation 10.3, u * (r21 * x + r22 * y + t2) - v * (r11 * x + r12 * y + t1) = 0.
-    // Solving in order of [r11, r21, r31, r12, r22, r32, t1, t2, t3]
-    Mat M1 ( frame->corner_count, 9, CV_64F, 0.0 );
-    M1.col ( 2 ) += v.mul ( x );
-    M1.col ( 5 ) += v.mul ( y );
-    M1.col ( 8 ) += v;
-    M1.col ( 1 ) += -f_rho.mul ( x );
-    M1.col ( 4 ) += -f_rho.mul ( y );
-    M1.col ( 7 ) += -f_rho;
-
-    Mat M2 ( frame->corner_count, 9, CV_64F, 0.0 );
-    M2.col ( 0 ) += f_rho.mul ( x );
-    M2.col ( 3 ) += f_rho.mul ( y );
-    M2.col ( 6 ) += f_rho;
-    M2.col ( 2 ) += -u.mul ( x );
-    M2.col ( 5 ) += -u.mul ( y );
-    M2.col ( 8 ) += -u;
-
-    Mat M3 ( frame->corner_count, 9, CV_64F, 0.0 );
-    M3.col ( 1 ) += u.mul ( x );
-    M3.col ( 4 ) += u.mul ( y );
-    M3.col ( 7 ) += u;
-    M3.col ( 0 ) += -v.mul ( x );
-    M3.col ( 3 ) += -v.mul ( y );
-    M3.col ( 6 ) += -v;
-
-    Mat M;
-    vector<Mat> M_vec = {M1, M2, M3};
-    vconcat ( M_vec, M );
-
-    SVD svd ( M, CV_SVD_MODIFY_A );
-    double r11 = svd.vt.at<double> ( 8, 0 );
-    double r21 = svd.vt.at<double> ( 8, 1 );
-    double r31 = svd.vt.at<double> ( 8, 2 );
-    double r12 = svd.vt.at<double> ( 8, 3 );
-    double r22 = svd.vt.at<double> ( 8, 4 );
-    double r32 = svd.vt.at<double> ( 8, 5 );
-    double t1 = svd.vt.at<double> ( 8, 6 );
-    double t2 = svd.vt.at<double> ( 8, 7 );
-    double t3 = svd.vt.at<double> ( 8, 8 );
-
-    Vec3d r1 ( r11, r21, r31 );
-    Vec3d r2 ( r12, r22, r32 );
-    double lambda = 1.0 / cv::norm ( r1 );
-    double lambda2 = 1.0 / cv::norm ( r2 );
-    r1 *= lambda;
-    r2 *= lambda;
-    Vec3d r3 = r1.cross ( r2 );
-    Vec3d t ( t1, t2, t3 );
-    Mat ( r1 ).copyTo ( frame->transform.col ( 0 ) );
-    Mat ( r2 ).copyTo ( frame->transform.col ( 1 ) );
-    Mat ( r3 ).copyTo ( frame->transform.col ( 2 ) );
-    Mat ( t ).copyTo ( frame->transform.col ( 3 ) );
-}
-
 bool CameraCalibration::RefineTransforms ( const Mat& u, const Mat& v, const Mat& x, const Mat& y, vector< Mat >* transforms )
 {
     vector<Mat> refined_transforms;
@@ -262,11 +192,16 @@ bool CameraCalibration::RefineTransforms ( const Mat& u, const Mat& v, const Mat
     // Finds transform with the minimum translation.
     double min_translation = numeric_limits< double >::infinity();
     int min_translation_index = -1;
+    double x1 = x.at<double> ( 0, 0 );
+    double y1 = y.at<double> ( 0, 0 );
     for ( unsigned i=0; i<transforms->size(); i++ )
     {
-        Vec2d t ( ( *transforms ) [i].at<double> ( 0,2 ), ( *transforms ) [i].at<double> ( 1,2 ) );
-        Vec2d p ( u.at<double> ( 0,0 ), v.at<double> ( 0,0 ) );
-        double translation = cv::norm ( t - p );
+        cout << ( *transforms ) [i] << endl;
+        double u1 = ( *transforms ) [i].at<double> ( 0, 0 ) * x1 + ( *transforms ) [i].at<double> ( 0, 1 ) * y1 + ( *transforms ) [i].at<double> ( 0, 2 );
+        double v1 = ( *transforms ) [i].at<double> ( 1, 0 ) * x1 + ( *transforms ) [i].at<double> ( 1, 1 ) * y1 + ( *transforms ) [i].at<double> ( 1, 2 );
+        double u0 = u.at<double> ( 0, 0 );
+        double v0 = v.at<double> ( 0, 0 );
+        double translation = hypot ( u1 - u0, v1 - v0 );
         if ( translation < min_translation )
         {
             min_translation = translation;
@@ -357,6 +292,8 @@ bool CameraCalibration::FinalizeTransform ( const Mat& u, const Mat& v, const Ma
     r3.copyTo ( final_transform->col ( 2 ) );
     t.copyTo ( final_transform->col ( 3 ) );
 
+    cout << *final_transform << endl;
+
     return true;
 }
 
@@ -402,6 +339,10 @@ void CameraCalibration::CalculatePolyAndT3()
     for ( unsigned frame_index=0; frame_index<_valid_frames.size(); frame_index++ )
     {
         _valid_frames[frame_index].transform.at<double> ( 2, 3 ) = t3s[frame_index];
+        if ( t3s[frame_index] > 0.0 )
+        {
+            _valid_frames[frame_index].valid = false;
+        }
     }
 }
 
@@ -432,6 +373,81 @@ void CameraCalibration::CalculateInversePolyFromPoly()
     }
     // Update inverse poly parameters.
     _camera.SetInversePolyParameters ( inverse_poly_parameters );
+}
+
+void CameraCalibration::CalculateExtrinsicWithIntrinsic ( Frame* frame )
+{
+    Vec2d camera_center = _camera.GetCenter();
+    double poly[POLY_SIZE];
+    _camera.GetPolyParameters ( poly );
+
+    Mat u = frame->flatten_detected_corners_64.col ( 0 ) - camera_center[0];
+    Mat v = frame->flatten_detected_corners_64.col ( 1 ) - camera_center[1];
+    Mat x = frame->flatten_board_corners_64.col ( 0 );
+    Mat y = frame->flatten_board_corners_64.col ( 1 );
+    Mat f_rho ( frame->corner_count, 1, CV_64F );
+    for ( unsigned i=0; i<frame->corner_count; i++ )
+    {
+        f_rho.at<double> ( i, 0 ) = Utils::EvaluatePolyEquation ( poly, POLY_SIZE, hypot ( u.at<double> ( i, 0 ), v.at<double> ( i, 0 ) ) );
+    }
+    vector<double> f_rho_data ( ( double* ) f_rho.data, ( double* ) f_rho.data + f_rho.total() );
+
+    // Equation 10.1, v * (r31 * x + r32 * y + t3) - f(rho) * (r21 * x + r22 * y + t2) = 0.
+    // Equation 10.2, f(rho) * (r11 * x + r12 * y + t1) - u * (r31 * x + r32 * y + t3) = 0.
+    // Equation 10.3, u * (r21 * x + r22 * y + t2) - v * (r11 * x + r12 * y + t1) = 0.
+    // Solving in order of [r11, r21, r31, r12, r22, r32, t1, t2, t3]
+    Mat M1 ( frame->corner_count, 9, CV_64F, 0.0 );
+    M1.col ( 2 ) += v.mul ( x );
+    M1.col ( 5 ) += v.mul ( y );
+    M1.col ( 8 ) += v;
+    M1.col ( 1 ) += -f_rho.mul ( x );
+    M1.col ( 4 ) += -f_rho.mul ( y );
+    M1.col ( 7 ) += -f_rho;
+
+    Mat M2 ( frame->corner_count, 9, CV_64F, 0.0 );
+    M2.col ( 0 ) += f_rho.mul ( x );
+    M2.col ( 3 ) += f_rho.mul ( y );
+    M2.col ( 6 ) += f_rho;
+    M2.col ( 2 ) += -u.mul ( x );
+    M2.col ( 5 ) += -u.mul ( y );
+    M2.col ( 8 ) += -u;
+
+    Mat M3 ( frame->corner_count, 9, CV_64F, 0.0 );
+    M3.col ( 1 ) += u.mul ( x );
+    M3.col ( 4 ) += u.mul ( y );
+    M3.col ( 7 ) += u;
+    M3.col ( 0 ) += -v.mul ( x );
+    M3.col ( 3 ) += -v.mul ( y );
+    M3.col ( 6 ) += -v;
+
+    Mat M;
+    vector<Mat> M_vec = {M1, M2, M3};
+    vconcat ( M_vec, M );
+
+    SVD svd ( M, CV_SVD_MODIFY_A );
+    double r11 = svd.vt.at<double> ( 8, 0 );
+    double r21 = svd.vt.at<double> ( 8, 1 );
+    double r31 = svd.vt.at<double> ( 8, 2 );
+    double r12 = svd.vt.at<double> ( 8, 3 );
+    double r22 = svd.vt.at<double> ( 8, 4 );
+    double r32 = svd.vt.at<double> ( 8, 5 );
+    double t1 = svd.vt.at<double> ( 8, 6 );
+    double t2 = svd.vt.at<double> ( 8, 7 );
+    double t3 = svd.vt.at<double> ( 8, 8 );
+
+    Vec3d r1 ( r11, r21, r31 );
+    Vec3d r2 ( r12, r22, r32 );
+    double lambda = 1.0 / cv::norm ( r1 );
+    double lambda2 = 1.0 / cv::norm ( r2 );
+    r1 *= lambda;
+    r2 *= lambda;
+    Vec3d r3 = r1.cross ( r2 );
+    Vec3d t ( t1, t2, t3 );
+    t *= lambda;
+    Mat ( r1 ).copyTo ( frame->transform.col ( 0 ) );
+    Mat ( r2 ).copyTo ( frame->transform.col ( 1 ) );
+    Mat ( r3 ).copyTo ( frame->transform.col ( 2 ) );
+    Mat ( t ).copyTo ( frame->transform.col ( 3 ) );
 }
 
 int CameraCalibration::RejectFrames ( const double average_bound, const double deviation_bound, const bool remove_invalid )
@@ -645,16 +661,13 @@ double CameraCalibration::Reproject()
         _camera.GetIntrinsicParameters ( intrinsic_parameters );
         Mat rotation_vector, translation_vector;
         Utils::GetRAndTVectorsFromTransform ( frame->transform, &rotation_vector, &translation_vector );
-	cout << frame->transform << endl;
-	cout << frame->flatten_board_corners_64 << endl;
-	cout << frame->flatten_detected_corners_64 << endl;
         Mat flatten_reprojected_corners;
         Utils::ReprojectCornersInFrame ( intrinsic_parameters, ( double* ) rotation_vector.data, ( double* ) translation_vector.data,
                                          frame->flatten_board_corners_64, &flatten_reprojected_corners );
-	cout << flatten_reprojected_corners << endl;
         // Updates reprojected corners in current frame.
         frame->flatten_reprojected_corners_64 = flatten_reprojected_corners;
-        Mat reprojected_corners_32 = flatten_reprojected_corners.reshape ( 2, frame->corner_count );
+
+        Mat reprojected_corners_32 = Utils::SwapPointsXandY ( flatten_reprojected_corners ).reshape ( 2, frame->corner_count );
         reprojected_corners_32.convertTo ( frame->reprojected_corners_32, CV_32FC2 );
         // Accumulates reprojection error.
         Mat reprojection_error = frame->flatten_reprojected_corners_64 - frame->flatten_detected_corners_64;

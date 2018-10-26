@@ -38,7 +38,6 @@ int main ( int argc, char** argv )
         parser.printErrors();
         return 0;
     }
-    
 
     CameraSystemCalibration camera_system_calibration ( output_folder, config_file_name, detector_file_name, mono_file_name, mono_calibration_used, true );
     camera_system_calibration.FetchCornersInFrames();

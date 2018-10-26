@@ -24,9 +24,11 @@ public:
     static void SaveFrame ( const string& folder, const Frame& frame, const bool draw_detected, const bool draw_reprojected, const bool save_original );
 
     // Collects points from vector based on ids to a N x 1 x c(3) Mat.
+    // Note that opencv charuco return points coordinates with y+ up and x+ right, and start from (size, size).
     static Mat GetCharucoBoardCornersMatFromVector ( const Mat& corner_ids, const vector<Point3f>& point_vector );
     
     // Swap x and y coordinate for applying coordinates system used in paper.
+    // Note that input is assumed to be single channel and single point in each row.
     static Mat SwapPointsXandY (const Mat& points);
 
     // Return +1 if positive, -1 if negative, 0 otherwise.
@@ -60,6 +62,9 @@ public:
     // Reprojects a single board corner in the frame based on input instrinsic and extrinsic parameters.
     static void ReprojectSingleCorner ( const double* intrinsics, const double* rotation_vector_data, const double* translation_vector_data,
                                         const Vec3d& board_corner, Vec2d* reprojected_corner );
+    
+    // Reprojects point in camera coordinates system to sensor plane.
+    static void CameraToSensor (const double* poly, double x, double y, const double z, double* u, double* v);
 };
 
 #endif // UTILS_H
