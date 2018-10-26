@@ -104,6 +104,33 @@ private:
     double _rho;
 };
 
+struct ErrorToUpdatePoly2 {
+public:
+    ErrorToUpdatePoly2 ( const double* inverse_poly_parameters, const double theta )
+        : _inverse_poly_parameters ( inverse_poly_parameters ), _theta ( theta ) {
+        _rho = Utils::EvaluatePolyEquation ( inverse_poly_parameters, INV_POLY_SIZE, theta );
+    }
+
+    bool operator() ( const double* poly_parameters, double* residuals ) const {
+        double new_poly_parameters[POLY_SIZE];
+        copy ( poly_parameters, poly_parameters+POLY_SIZE, new_poly_parameters );
+        new_poly_parameters[1] = 0;
+        double f = Utils::EvaluatePolyEquation ( new_poly_parameters, POLY_SIZE, _rho );
+        residuals[0] = _theta - atan2 ( f, _rho );
+        return true;
+    }
+
+    static ceres::CostFunction* Create ( const double* inverse_poly_parameters, const double theta ) {
+        return ( new ceres::NumericDiffCostFunction<ErrorToUpdatePoly2, ceres::CENTRAL, 1, POLY_SIZE> (
+                     new ErrorToUpdatePoly2 ( inverse_poly_parameters, theta )
+                 ) );
+    }
+private:
+    const double* _inverse_poly_parameters;
+    const double _theta;
+    double _rho;
+};
+
 struct ErrorToOptimizeFully {
 public:
     ErrorToOptimizeFully ( const Mat& detected_corners, const Mat& board_corners )
@@ -210,7 +237,7 @@ public:
 
     bool operator() ( const double* rotation_vector, const double* translation_vector, double* residuals ) const {
         Mat reprojected_corners;
-	Utils::ReprojectCornersInFrame(_intrinsics, rotation_vector, translation_vector, _board_corners, &reprojected_corners );
+        Utils::ReprojectCornersInFrame ( _intrinsics, rotation_vector, translation_vector, _board_corners, &reprojected_corners );
         Mat reprojection_error = reprojected_corners - _detected_corners;
         copy ( ( double* ) reprojection_error.data, ( double* ) reprojection_error.data + reprojected_corners.total(), residuals );
         return true;

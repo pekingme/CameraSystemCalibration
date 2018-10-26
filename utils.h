@@ -21,7 +21,7 @@ public:
     static void ShowFrameInWindow ( const string& window_name, const Frame& frame, const bool draw_detected, const bool draw_reprojected );
 
     // Saves a frame to file system with/without detected corners and/or reprojected corners.
-    static void SaveFrame ( const string& folder, const Frame& frame, const bool draw_detected, const bool draw_reprojected, const bool save_original );
+    static void SaveFrame ( const string& folder, const Frame& frame, const bool draw_detected, const bool draw_reprojected, const bool save_info );
 
     // Collects points from vector based on ids to a N x 1 x c(3) Mat.
     // Note that opencv charuco return points coordinates with y+ up and x+ right, and start from (size, size).

@@ -196,7 +196,6 @@ bool CameraCalibration::RefineTransforms ( const Mat& u, const Mat& v, const Mat
     double y1 = y.at<double> ( 0, 0 );
     for ( unsigned i=0; i<transforms->size(); i++ )
     {
-        cout << ( *transforms ) [i] << endl;
         double u1 = ( *transforms ) [i].at<double> ( 0, 0 ) * x1 + ( *transforms ) [i].at<double> ( 0, 1 ) * y1 + ( *transforms ) [i].at<double> ( 0, 2 );
         double v1 = ( *transforms ) [i].at<double> ( 1, 0 ) * x1 + ( *transforms ) [i].at<double> ( 1, 1 ) * y1 + ( *transforms ) [i].at<double> ( 1, 2 );
         double u0 = u.at<double> ( 0, 0 );
@@ -378,17 +377,26 @@ void CameraCalibration::CalculateInversePolyFromPoly()
 void CameraCalibration::CalculateExtrinsicWithIntrinsic ( Frame* frame )
 {
     Vec2d camera_center = _camera.GetCenter();
-    double poly[POLY_SIZE];
+    double poly[POLY_SIZE], intrinsics[TOTAL_SIZE];
+    _camera.GetIntrinsicParameters ( intrinsics );
     _camera.GetPolyParameters ( poly );
+    Mat A = Mat::eye ( 2, 2, CV_64FC1 );
+    A.at<double> ( 0, 0 ) = intrinsics[0];
+    A.at<double> ( 0, 1 ) = intrinsics[1];
+    A.at<double> ( 1, 0 ) = intrinsics[2];
+    Mat A_inv = A.inv();
 
-    Mat u = frame->flatten_detected_corners_64.col ( 0 ) - camera_center[0];
-    Mat v = frame->flatten_detected_corners_64.col ( 1 ) - camera_center[1];
+    Mat u_img = frame->flatten_detected_corners_64.col ( 0 ) - camera_center[0];
+    Mat v_img = frame->flatten_detected_corners_64.col ( 1 ) - camera_center[1];
+
+    Mat u_sen = A_inv.at<double> ( 0, 0 ) * u_img + A_inv.at<double> ( 0, 1 ) * v_img;
+    Mat v_sen = A_inv.at<double> ( 1, 0 ) * u_img + A_inv.at<double> ( 1, 1 ) * v_img;
     Mat x = frame->flatten_board_corners_64.col ( 0 );
     Mat y = frame->flatten_board_corners_64.col ( 1 );
     Mat f_rho ( frame->corner_count, 1, CV_64F );
     for ( unsigned i=0; i<frame->corner_count; i++ )
     {
-        f_rho.at<double> ( i, 0 ) = Utils::EvaluatePolyEquation ( poly, POLY_SIZE, hypot ( u.at<double> ( i, 0 ), v.at<double> ( i, 0 ) ) );
+        f_rho.at<double> ( i, 0 ) = Utils::EvaluatePolyEquation ( poly, POLY_SIZE, hypot ( u_sen.at<double> ( i, 0 ), v_sen.at<double> ( i, 0 ) ) );
     }
     vector<double> f_rho_data ( ( double* ) f_rho.data, ( double* ) f_rho.data + f_rho.total() );
 
@@ -397,32 +405,34 @@ void CameraCalibration::CalculateExtrinsicWithIntrinsic ( Frame* frame )
     // Equation 10.3, u * (r21 * x + r22 * y + t2) - v * (r11 * x + r12 * y + t1) = 0.
     // Solving in order of [r11, r21, r31, r12, r22, r32, t1, t2, t3]
     Mat M1 ( frame->corner_count, 9, CV_64F, 0.0 );
-    M1.col ( 2 ) += v.mul ( x );
-    M1.col ( 5 ) += v.mul ( y );
-    M1.col ( 8 ) += v;
-    M1.col ( 1 ) += -f_rho.mul ( x );
-    M1.col ( 4 ) += -f_rho.mul ( y );
-    M1.col ( 7 ) += -f_rho;
+    M1.col ( 2 ) += -v_sen.mul ( x );
+    M1.col ( 5 ) += -v_sen.mul ( y );
+    M1.col ( 8 ) += -v_sen;
+    M1.col ( 1 ) += f_rho.mul ( x );
+    M1.col ( 4 ) += f_rho.mul ( y );
+    M1.col ( 7 ) += f_rho;
 
     Mat M2 ( frame->corner_count, 9, CV_64F, 0.0 );
     M2.col ( 0 ) += f_rho.mul ( x );
     M2.col ( 3 ) += f_rho.mul ( y );
     M2.col ( 6 ) += f_rho;
-    M2.col ( 2 ) += -u.mul ( x );
-    M2.col ( 5 ) += -u.mul ( y );
-    M2.col ( 8 ) += -u;
+    M2.col ( 2 ) += -u_sen.mul ( x );
+    M2.col ( 5 ) += -u_sen.mul ( y );
+    M2.col ( 8 ) += -u_sen;
 
     Mat M3 ( frame->corner_count, 9, CV_64F, 0.0 );
-    M3.col ( 1 ) += u.mul ( x );
-    M3.col ( 4 ) += u.mul ( y );
-    M3.col ( 7 ) += u;
-    M3.col ( 0 ) += -v.mul ( x );
-    M3.col ( 3 ) += -v.mul ( y );
-    M3.col ( 6 ) += -v;
+    M3.col ( 1 ) += u_sen.mul ( x );
+    M3.col ( 4 ) += u_sen.mul ( y );
+    M3.col ( 7 ) += u_sen;
+    M3.col ( 0 ) += -v_sen.mul ( x );
+    M3.col ( 3 ) += -v_sen.mul ( y );
+    M3.col ( 6 ) += -v_sen;
 
     Mat M;
     vector<Mat> M_vec = {M1, M2, M3};
     vconcat ( M_vec, M );
+
+    cout << M << endl;
 
     SVD svd ( M, CV_SVD_MODIFY_A );
     double r11 = svd.vt.at<double> ( 8, 0 );
@@ -437,8 +447,7 @@ void CameraCalibration::CalculateExtrinsicWithIntrinsic ( Frame* frame )
 
     Vec3d r1 ( r11, r21, r31 );
     Vec3d r2 ( r12, r22, r32 );
-    double lambda = 1.0 / cv::norm ( r1 );
-    double lambda2 = 1.0 / cv::norm ( r2 );
+    double lambda = ( t3 > 0 ? -1.0 : 1.0 ) / cv::norm ( r1 );
     r1 *= lambda;
     r2 *= lambda;
     Vec3d r3 = r1.cross ( r2 );
@@ -621,10 +630,12 @@ void CameraCalibration::CalculatePolyFromInversePoly()
     double max_theta = atan2 ( Utils::EvaluatePolyEquation ( poly_parameters, POLY_SIZE, max_rho ), max_rho );
     // Forms up the ceres problem.
     ceres::Problem problem;
-    for ( double theta=-M_PI_2; theta<max_theta; theta+=0.01 )
+    for ( double theta=-M_PI_2; theta<max_theta; theta+=0.001 )
     {
-        ceres::CostFunction* cost_function = ErrorToUpdatePoly::Create ( inverse_poly_parameters, poly_parameters, theta );
-        problem.AddResidualBlock ( cost_function, NULL, poly_factors );
+        //ceres::CostFunction* cost_function = ErrorToUpdatePoly::Create ( inverse_poly_parameters, poly_parameters, theta );
+        ceres::CostFunction* cost_function = ErrorToUpdatePoly2::Create ( inverse_poly_parameters, theta );
+        //problem.AddResidualBlock ( cost_function, NULL, poly_factors );
+        problem.AddResidualBlock ( cost_function, NULL, poly_parameters );
     }
     // Solves ceres problem.
     ceres::Solver::Options options;
@@ -638,10 +649,11 @@ void CameraCalibration::CalculatePolyFromInversePoly()
         cout << summary.FullReport() << endl;
     }
     // Updates poly parameters.
-    for ( int i=0; i<POLY_SIZE; i++ )
-    {
-        poly_parameters[i] *= poly_factors[i];
-    }
+//     for ( int i=0; i<POLY_SIZE; i++ )
+//     {
+//         poly_parameters[i] *= poly_factors[i];
+//     }
+    poly_parameters[1] = 0;
     _camera.SetPolyParameters ( poly_parameters );
 }
 
@@ -708,7 +720,11 @@ void CameraCalibration::SaveAllValidFrames ( const string& folder, const bool dr
         Frame frame = _valid_frames[i];
         if ( frame.valid )
         {
-            Utils::SaveFrame ( folder, frame, draw_detected, draw_reprojected, save_original );
+            Utils::SaveFrame ( folder, frame, draw_detected, draw_reprojected, true );
+            if ( save_original )
+            {
+                Utils::SaveFrame ( folder+"original/", frame, false, false, false );
+            }
         }
     }
 }
