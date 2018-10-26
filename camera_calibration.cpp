@@ -260,12 +260,12 @@ bool CameraCalibration::FinalizeTransform ( const Mat& u, const Mat& v, const Ma
 
         // Solves the matrix.
         Mat m_a_rho, m_c_rho, pp, qq;
-        vector<Mat> m_a_rho_vec = {m_a, m_a.mul ( rho ), m_a.mul ( rho_2 ), -v};
-        vector<Mat> m_c_rho_vec = {m_c, m_c.mul ( rho ), m_c.mul ( rho_2 ), -u};
+        vector<Mat> m_a_rho_vec = {m_a, m_a.mul ( rho ), m_a.mul ( rho_2 ), v};
+        vector<Mat> m_c_rho_vec = {m_c, m_c.mul ( rho ), m_c.mul ( rho_2 ), u};
         hconcat ( m_a_rho_vec, m_a_rho );
         hconcat ( m_c_rho_vec, m_c_rho );
         vconcat ( m_a_rho, m_c_rho, pp );
-        vconcat ( m_b, m_d, qq );
+        vconcat ( -m_b, -m_d, qq );
         Mat pseudo_inv_pp;
         invert ( pp, pseudo_inv_pp, DECOMP_SVD );
         Mat solution = pseudo_inv_pp * qq;

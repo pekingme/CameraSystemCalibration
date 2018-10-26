@@ -28,8 +28,8 @@ public:
     bool operator() ( const double* poly, const double* t3, double* residuals ) const {
         double constraint_1 = poly[2] * 2 * _rho_powers[1] + poly[3] * 3 * _rho_powers[2] + poly[4] * 4 * _rho_powers[3];
         double constraint_2 = poly[2] * 2 + poly[3] * 6 * _rho_powers[1] + poly[4] * 12 * _rho_powers[2];
-        residuals[0] = poly[0] * _a + poly[2] * _a * _rho_powers[2] + poly[3] * _a * _rho_powers[3] + poly[4] * _a * _rho_powers[4] - t3[0] * _detected_corner[1] - _b;
-        residuals[1] = poly[0] * _c + poly[2] * _c * _rho_powers[2] + poly[3] * _c * _rho_powers[3] + poly[4] * _c * _rho_powers[4] - t3[0] * _detected_corner[0] - _d;
+        residuals[0] = poly[0] * _a + poly[2] * _a * _rho_powers[2] + poly[3] * _a * _rho_powers[3] + poly[4] * _a * _rho_powers[4] + t3[0] * _detected_corner[1] + _b;
+        residuals[1] = poly[0] * _c + poly[2] * _c * _rho_powers[2] + poly[3] * _c * _rho_powers[3] + poly[4] * _c * _rho_powers[4] + t3[0] * _detected_corner[0] + _d;
         if ( constraint_1 < 0 || constraint_2 < 0 ) {
             residuals[0] = max ( -constraint_1, -constraint_2 ) * 1e100;
             residuals[1] = max ( -constraint_1, -constraint_2 ) * 1e100;

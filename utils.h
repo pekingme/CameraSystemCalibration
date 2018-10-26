@@ -62,9 +62,6 @@ public:
     // Reprojects a single board corner in the frame based on input instrinsic and extrinsic parameters.
     static void ReprojectSingleCorner ( const double* intrinsics, const double* rotation_vector_data, const double* translation_vector_data,
                                         const Vec3d& board_corner, Vec2d* reprojected_corner );
-    
-    // Reprojects point in camera coordinates system to sensor plane.
-    static void CameraToSensor (const double* poly, double x, double y, const double z, double* u, double* v);
 };
 
 #endif // UTILS_H
