@@ -209,7 +209,7 @@ void Utils::ReprojectCornersInFrame ( const double* intrinsics, const double* ro
             norm_on_xy = 1e-14;
         }
         // Calculates projected position on the frame.
-        double theta = atan2 ( corner_z, norm_on_xy );
+        double theta = atan2 ( -corner_z, norm_on_xy );
         double rho = EvaluatePolyEquation ( inverse_poly, INV_POLY_SIZE, theta );
         // u, v of corner on frame without affine.
         double corner_u = corner_x * rho / norm_on_xy;
@@ -250,7 +250,7 @@ void Utils::ReprojectSingleCorner ( const double* intrinsics, const double* rota
         norm_on_xy = 1e-14;
     }
     // Calculates projected position on the frame.
-    double theta = atan2 ( board_corner_in_camera[2], norm_on_xy );
+    double theta = atan2 ( -board_corner_in_camera[2], norm_on_xy );
     double rho = EvaluatePolyEquation ( inverse_poly, INV_POLY_SIZE, theta );
     // u, v of corner on frame without affine.
     double corner_u = board_corner_in_camera[0] * rho / norm_on_xy;
@@ -282,9 +282,6 @@ void Utils::CameraToSensor ( const double* poly, double x, double y, const doubl
     poly_copy[0] -= tan;
     Mat roots, poly_mat ( POLY_SIZE, 1, CV_64F, poly_copy );
     solvePoly ( poly_mat, roots );
-
-//     cout << poly_mat << endl;
-//     cout << roots << endl;
 
     double rho = -1;
     for ( int i=0; i<roots.rows; i++ )

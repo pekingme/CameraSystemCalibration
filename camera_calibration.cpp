@@ -338,7 +338,7 @@ void CameraCalibration::CalculatePolyAndT3()
     for ( unsigned frame_index=0; frame_index<_valid_frames.size(); frame_index++ )
     {
         _valid_frames[frame_index].transform.at<double> ( 2, 3 ) = t3s[frame_index];
-        if ( t3s[frame_index] > 0.0 )
+        if ( t3s[frame_index] < 0.0 )
         {
             _valid_frames[frame_index].valid = false;
         }
@@ -396,7 +396,7 @@ void CameraCalibration::CalculateExtrinsicWithIntrinsic ( Frame* frame )
     Mat f_rho ( frame->corner_count, 1, CV_64F );
     for ( unsigned i=0; i<frame->corner_count; i++ )
     {
-        f_rho.at<double> ( i, 0 ) = Utils::EvaluatePolyEquation ( poly, POLY_SIZE, hypot ( u_sen.at<double> ( i, 0 ), v_sen.at<double> ( i, 0 ) ) );
+        f_rho.at<double> ( i, 0 ) = -Utils::EvaluatePolyEquation ( poly, POLY_SIZE, hypot ( u_sen.at<double> ( i, 0 ), v_sen.at<double> ( i, 0 ) ) );
     }
     vector<double> f_rho_data ( ( double* ) f_rho.data, ( double* ) f_rho.data + f_rho.total() );
 
@@ -432,8 +432,6 @@ void CameraCalibration::CalculateExtrinsicWithIntrinsic ( Frame* frame )
     vector<Mat> M_vec = {M1, M2, M3};
     vconcat ( M_vec, M );
 
-    cout << M << endl;
-
     SVD svd ( M, CV_SVD_MODIFY_A );
     double r11 = svd.vt.at<double> ( 8, 0 );
     double r21 = svd.vt.at<double> ( 8, 1 );
@@ -447,7 +445,7 @@ void CameraCalibration::CalculateExtrinsicWithIntrinsic ( Frame* frame )
 
     Vec3d r1 ( r11, r21, r31 );
     Vec3d r2 ( r12, r22, r32 );
-    double lambda = ( t3 > 0 ? -1.0 : 1.0 ) / cv::norm ( r1 );
+    double lambda = ( t3 < 0 ? -1.0 : 1.0 ) / cv::norm ( r1 );
     r1 *= lambda;
     r2 *= lambda;
     Vec3d r3 = r1.cross ( r2 );
