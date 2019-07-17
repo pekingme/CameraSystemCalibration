@@ -14,6 +14,20 @@ bool Utils::FileExists ( const string& filename )
     }
 }
 
+bool Utils::FolderExists ( const string& folderName )
+{
+    if ( DIR* dir = opendir ( folderName.c_str() ) )
+    {
+        closedir ( dir );
+        return true;
+    }
+    else
+    {
+        cerr << "Folder not found: " << folderName << endl;
+        return false;
+    }
+}
+
 void Utils::ShowFrameInWindow ( const string& window_name, const Frame& frame, const bool draw_detected, const bool draw_reprojected )
 {
     Mat canvas_mat;
@@ -157,18 +171,17 @@ Mat Utils::GetTransform44From34 ( const Mat& transform_3_4 )
     return transform_4_4;
 }
 
-Mat Utils::InvertTransform ( const Mat& transform_3_4 )
+Mat Utils::InvertTransform ( const Mat& transform )
 {
-    CV_Assert ( transform_3_4.rows == 3 && transform_3_4.cols == 4 );
-    Mat rotation = transform_3_4.colRange ( 0, 3 );
-    Mat inverted_rotation = rotation.t();
-    Mat translation = transform_3_4.col ( 3 );
-    Mat inverted_translation = -inverted_rotation * translation;
-    Mat inverted_transform = Mat::eye ( 3, 4, transform_3_4.type() );
-    inverted_rotation.copyTo ( inverted_transform.colRange ( 0, 3 ) );
-    inverted_translation.copyTo ( inverted_transform.col ( 3 ) );
+    Mat inverse_transform = Mat::eye ( transform.rows, transform.cols, transform.type() );
+    Mat rotation = transform.rowRange ( 0,3 ).colRange ( 0,3 );
+    Mat inverse_rotation = rotation.t();
+    inverse_rotation.copyTo ( inverse_transform.rowRange ( 0,3 ).colRange ( 0,3 ) );
+    Mat translation = transform.col ( 3 ).rowRange ( 0,3 );
+    Mat inverse_translation = inverse_rotation * translation * -1;
+    inverse_translation.copyTo ( inverse_transform.col ( 3 ).rowRange ( 0, 3 ) );
 
-    return inverted_transform;
+    return inverse_transform;
 }
 
 void Utils::ReprojectCornersInFrame ( const double* intrinsics, const double* rotation_vector_data,

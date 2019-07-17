@@ -1,4 +1,5 @@
-/build/
-/examples/
-/.kdev4/
+**/build
+**/examples
+**/example_data
+**/.kdev4
 CameraSystemCalibration.kdev4

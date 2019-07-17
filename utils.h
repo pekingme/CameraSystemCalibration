@@ -3,6 +3,8 @@
 
 #include <string>
 #include <iostream>
+#include <dirent.h>
+#include <errno.h>
 #include "structs.h"
 #include "camera.h"
 #include "opencv2/opencv.hpp"
@@ -17,6 +19,9 @@ public:
     // Returns if a file exists in file system.
     static bool FileExists ( const string& filename );
 
+    // Returns if a folder exists in file system.
+    static bool FolderExists ( const string& folderName );
+
     // Draws a frame on a named window with/without detected corners and/or reprojected corners.
     static void ShowFrameInWindow ( const string& window_name, const Frame& frame, const bool draw_detected, const bool draw_reprojected );
 
@@ -26,10 +31,10 @@ public:
     // Collects points from vector based on ids to a N x 1 x c(3) Mat.
     // Note that opencv charuco return points coordinates with y+ up and x+ right, and start from (size, size).
     static Mat GetCharucoBoardCornersMatFromVector ( const Mat& corner_ids, const vector<Point3f>& point_vector );
-    
+
     // Swap x and y coordinate for applying coordinates system used in paper.
     // Note that input is assumed to be single channel and single point in each row.
-    static Mat SwapPointsXandY (const Mat& points);
+    static Mat SwapPointsXandY ( const Mat& points );
 
     // Return +1 if positive, -1 if negative, 0 otherwise.
     static int Sign ( const double value );
@@ -42,18 +47,18 @@ public:
 
     // Forms up 3 x 4 transform matrix from rotation vector and translation vector.
     static void GetTransformFromRAndTVectors ( const Mat& r_mat, const Mat& t_mat, Mat* transform );
-    
+
     // Gets Cayley vector and translation vector from 3 x 4 transform matrix.
     static void GetCAndTVectorsFromTransform ( const Mat& transform, Mat* c_mat, Mat* t_mat );
-    
+
     // Gets Cayley vector vector from 3 x 3 rotation matrix.
     static void GetCVectorFromRotation ( const Mat& rotation, Mat* c_mat );
-    
+
     // Get transfrom matrix 4 x 4 from transfrom 3 x 4.
-    static Mat GetTransform44From34(const Mat& transform);
-    
-    // Invert transform matrix 3 x 4.
-    static Mat InvertTransform(const Mat& transform);
+    static Mat GetTransform44From34 ( const Mat& transform );
+
+    // Get inversed transform matrix.
+    static Mat InvertTransform ( const Mat& transform );
 
     // Reprojects the board corners in the frame based on input intrinsic and extrinsic parameters.
     static void ReprojectCornersInFrame ( const double* intrinsics, const double* rotation_vector_data, const double* translation_vector_data,

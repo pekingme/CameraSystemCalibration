@@ -70,7 +70,7 @@ public:
     void SetIntrinsicsParameters ( const double* intrinsics ) {
         copy ( intrinsics, intrinsics+TOTAL_SIZE, _intrinsics );
     }
-    void CopyIntrinsicsFrom( const Camera& cam );
+    void CopyIntrinsicsFrom ( const Camera& cam );
 
     void SetFrameSize ( const Size& frame_size ) {
         _width = frame_size.width;

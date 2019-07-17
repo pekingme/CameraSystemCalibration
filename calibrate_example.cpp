@@ -13,7 +13,8 @@ const char* keys =
     "{@output|<none>|Output folder storing calibration results}"
     "{@config|<none>|Input file storing calibration configurations}"
     "{@aruco|<none>|Input file storing ArUco detector parameters}"
-    "{mono monoFileName||Input file storing mono calibration results}";
+    "{mono monoFileName||Input file storing mono calibration results}"
+    "{ph usePhoto||Use photos for calibration instead of videos}";
 }
 
 int main ( int argc, char** argv )
@@ -32,6 +33,7 @@ int main ( int argc, char** argv )
     string detector_file_name = parser.get<string> ( "@aruco" );
     bool mono_calibration_used = parser.has ( "mono" );
     string mono_file_name = parser.get<string> ( "monoFileName" );
+    bool use_photo = parser.has ( "usePhoto" );
 
     if ( !parser.check() )
     {
@@ -39,10 +41,45 @@ int main ( int argc, char** argv )
         return 0;
     }
 
-    CameraSystemCalibration camera_system_calibration ( output_folder, config_file_name, detector_file_name, mono_file_name, mono_calibration_used, true );
-    camera_system_calibration.FetchCornersInFrames();
-    camera_system_calibration.Calibrate();
-    camera_system_calibration.SaveResults();
-    camera_system_calibration.SaveResults2();
+    if ( !use_photo )
+    {
+        CameraSystemCalibration camera_system_calibration;
+        if ( mono_calibration_used )
+        {
+            camera_system_calibration.LoadCalibrationWithVideoAndMono ( output_folder, config_file_name, detector_file_name, mono_file_name, false );;
+            camera_system_calibration.ExtractFramesAndCorners();
+        }
+        else
+        {
+            camera_system_calibration.LoadCalibrationWithVideo ( output_folder, config_file_name, detector_file_name, false );
+            camera_system_calibration.ExtractFramesAndCorners();
+        }
+        camera_system_calibration.Calibrate();
+        camera_system_calibration.SaveResultsCombined();
+        camera_system_calibration.SaveInterCameraExtrinsics();
+        camera_system_calibration.SaveIntrinsics();
+
+//         CameraSystemCalibration camera_system_calibration ( output_folder, config_file_name, detector_file_name, mono_file_name, mono_calibration_used, false );
+//         camera_system_calibration.FetchCornersInFrames();
+//         camera_system_calibration.Calibrate();
+//         camera_system_calibration.SaveResults();
+//         camera_system_calibration.SaveResults2();
+    }
+    else
+    {
+        CameraSystemCalibration camera_system_calibration;
+        camera_system_calibration.LoadCalibrationWithPhotos ( output_folder, config_file_name, detector_file_name, false );
+        camera_system_calibration.Calibrate();
+        camera_system_calibration.SaveResultsCombined();
+        camera_system_calibration.SaveInterCameraExtrinsics();
+        camera_system_calibration.SaveIntrinsics();
+
+
+//         CameraSystemCalibration camera_system_calibration ( output_folder, config_file_name, detector_file_name, false );
+//         camera_system_calibration.FetchCornersInPhotos();
+//         camera_system_calibration.Calibrate();
+//         camera_system_calibration.SaveIntrinsics();
+//         camera_system_calibration.SaveInterCameraExtrinsics();
+    }
 }
 

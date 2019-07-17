@@ -22,28 +22,28 @@ public:
         : _options ( options ), _camera ( camera_name ), _ceres_details_enabled ( ceres_details_enabled ) {}
     CameraCalibration ( const string& camera_name, const CameraSystemCalibrationOptions& options, const Camera& camera, bool ceres_details_enabled )
         : _options ( options ), _camera ( camera ), _ceres_details_enabled ( ceres_details_enabled ) {}
-        
+
     // Extracts corners from frame and save if it's valid.
     bool ExtractCornersAndSave ( Frame* frame );
 
     // Overrides the intrinsic parameters with input values.
     // Calculates transform for each frame with loaded intrinsic parameters.
-    void OverrideIntrinsicsAndUpdateExtrinsics(const Camera& new_camera);
-    
+    void OverrideIntrinsicsAndUpdateExtrinsics ( const Camera& new_camera );
+
     // Performs mono calibration.
     void Calibrate();
 
     // Rejects frames with very big error.
-    int RejectFrames ( const double average_bound, const double deviation_bound, const bool remove_invalid );
+    int RejectFrames ( const double average_bound, const double deviation_bound, const bool remove_invalid, const bool show_error );
 
     // Revalidate all frames.
     void RevalidateFrames();
 
     // Optimizes intrinsic and extrinsic parameters.
-    void OptimizeFully();
-    
+    void OptimizeFully ();
+
     // Optimizes extrinsic parameters.
-    void OptimizeExtrinsic();
+    void OptimizeExtrinsic ();
 
     // Calculates and return reprojection error per corner of current calibration result.
     double Reproject();
@@ -90,10 +90,10 @@ private:
 
     // Calculates poly parameters from inverse poly parameters.
     void CalculatePolyFromInversePoly();
-    
+
     // Calculates extrinsic parameters with provided intrinsics.
     // See eq. 10.1, 10.2, 10.3 in Scaramuzza's paper.
-    void CalculateExtrinsicWithIntrinsic(Frame* frame);
+    void CalculateExtrinsicWithIntrinsic ( Frame* frame );
 
     // Removes all frame objects which are no longer valid.
     void RemoveInvalidFrames();

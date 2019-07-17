@@ -16,7 +16,7 @@ bool CameraCalibration::ExtractCornersAndSave ( Frame* frame )
     Mat charuco_detected_corners, charuco_corners_ids;
     aruco::interpolateCornersCharuco ( marker_detected_corners, marker_ids, frame->original_frame, board, charuco_detected_corners, charuco_corners_ids );
     Mat flatten_charuco_detected_corners = charuco_detected_corners.reshape ( 1 ); // Flatten N x 1 x 32FC2 to N x 2 x 32FC1.
-    flatten_charuco_detected_corners = Utils::SwapPointsXandY ( flatten_charuco_detected_corners );
+    //flatten_charuco_detected_corners = Utils::SwapPointsXandY ( flatten_charuco_detected_corners );
     if ( charuco_corners_ids.total() < 12 )
     {
         return false;
@@ -25,7 +25,7 @@ bool CameraCalibration::ExtractCornersAndSave ( Frame* frame )
     // Collects board charuco corners.
     Mat charuco_board_corners = Utils::GetCharucoBoardCornersMatFromVector ( charuco_corners_ids, board->chessboardCorners );
     Mat flatten_charuco_board_corners = charuco_board_corners.reshape ( 1 ); // Flatten N x 1 x 32FC3 to N x 3 x 32FC1.
-    flatten_charuco_board_corners = Utils::SwapPointsXandY ( flatten_charuco_board_corners );
+    //flatten_charuco_board_corners = Utils::SwapPointsXandY ( flatten_charuco_board_corners );
 
     // Updates corner information in Frame.
     frame->corner_count = charuco_corners_ids.total();
@@ -75,7 +75,7 @@ void CameraCalibration::Calibrate()
     // Initializes intrinsic parameters.
     Vec2i frame_size = _camera.GetFrameSize();
     // Camera center coorndiates are flipped.
-    double initial_intrinsics[TOTAL_SIZE] = {1, 0, 0, frame_size[1]/2.0, frame_size[0]/2.0};
+    double initial_intrinsics[TOTAL_SIZE] = {1, 0, 0, frame_size[0]/2.0, frame_size[1]/2.0};
     _camera.SetIntrinsicsParameters ( initial_intrinsics );
     // Initializes extrinsic parameters based on observed corners.
     for ( unsigned i=0; i<_valid_frames.size(); i++ )
@@ -291,8 +291,6 @@ bool CameraCalibration::FinalizeTransform ( const Mat& u, const Mat& v, const Ma
     r3.copyTo ( final_transform->col ( 2 ) );
     t.copyTo ( final_transform->col ( 3 ) );
 
-    cout << *final_transform << endl;
-
     return true;
 }
 
@@ -340,7 +338,7 @@ void CameraCalibration::CalculatePolyAndT3()
         _valid_frames[frame_index].transform.at<double> ( 2, 3 ) = t3s[frame_index];
         if ( t3s[frame_index] < 0.0 )
         {
-            _valid_frames[frame_index].valid = false;
+            _valid_frames[frame_index].transform *= -1.0;
         }
     }
 }
@@ -457,16 +455,31 @@ void CameraCalibration::CalculateExtrinsicWithIntrinsic ( Frame* frame )
     Mat ( t ).copyTo ( frame->transform.col ( 3 ) );
 }
 
-int CameraCalibration::RejectFrames ( const double average_bound, const double deviation_bound, const bool remove_invalid )
+int CameraCalibration::RejectFrames ( const double average_bound, const double deviation_bound, const bool remove_invalid, const bool show_errors )
 {
     int rejection_count = 0;
     for ( unsigned i=0; i<_valid_frames.size(); i++ )
     {
         Frame* frame = &_valid_frames[i];
+        if ( show_errors )
+        {
+            cout << "Frame [" << frame->global_index << "] reprojection error: " << frame->reprojection_error;
+        }
         if ( frame->valid && frame->reprojection_error > average_bound )
         {
             frame->valid = false;
             rejection_count ++;
+            if ( show_errors )
+            {
+                cout << " rejected" << endl;
+            }
+        }
+        else
+        {
+            if ( show_errors )
+            {
+                cout << endl;
+            }
         }
     }
     if ( remove_invalid )
@@ -677,7 +690,8 @@ double CameraCalibration::Reproject()
         // Updates reprojected corners in current frame.
         frame->flatten_reprojected_corners_64 = flatten_reprojected_corners;
 
-        Mat reprojected_corners_32 = Utils::SwapPointsXandY ( flatten_reprojected_corners ).reshape ( 2, frame->corner_count );
+        //Mat reprojected_corners_32 = Utils::SwapPointsXandY ( flatten_reprojected_corners ).reshape ( 2, frame->corner_count );
+        Mat reprojected_corners_32 = flatten_reprojected_corners.reshape ( 2, frame->corner_count );
         reprojected_corners_32.convertTo ( frame->reprojected_corners_32, CV_32FC2 );
         // Accumulates reprojection error.
         Mat reprojection_error = frame->flatten_reprojected_corners_64 - frame->flatten_detected_corners_64;
